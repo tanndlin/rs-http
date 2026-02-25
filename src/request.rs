@@ -1,6 +1,4 @@
-use std::str::FromStr;
-
-use crate::types::Header;
+use std::{collections::HashMap, str::FromStr};
 
 #[allow(clippy::upper_case_acronyms)]
 pub enum Method {
@@ -29,7 +27,7 @@ impl FromStr for Method {
 pub struct Request {
     pub method: Method,
     pub path: String,
-    pub headers: Vec<Header>,
+    pub headers: HashMap<String, String>,
     pub body: String,
 }
 
@@ -53,7 +51,7 @@ impl Request {
         }
 
         // Get headers
-        let mut headers = Vec::new();
+        let mut headers = HashMap::new();
         for line in lines.by_ref() {
             if line.is_empty() {
                 break;
@@ -61,7 +59,7 @@ impl Request {
             let mut parts = line.splitn(2, ": ");
             let name = parts.next().ok_or("header missing name")?.to_string();
             let value = parts.next().ok_or("Header missing value")?.to_string();
-            headers.push(Header { name, value });
+            headers.insert(name, value);
         }
 
         // Get body
@@ -73,9 +71,5 @@ impl Request {
             headers,
             body,
         })
-    }
-
-    pub fn get_header(&self, name: &str) -> Option<&Header> {
-        self.headers.iter().find(|h| h.name == name)
     }
 }

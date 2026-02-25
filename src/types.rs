@@ -1,10 +1,5 @@
 use std::fmt::Display;
 
-pub struct Header {
-    pub name: String,
-    pub value: String,
-}
-
 #[derive(PartialEq, Eq)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum ImageType {

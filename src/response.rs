@@ -1,6 +1,4 @@
-use std::{ fmt::Display};
-
-use crate::types::Header;
+use std::{collections::HashMap, fmt::Display};
 
 pub enum StatusCode {
     Ok,
@@ -24,7 +22,7 @@ impl Display for StatusCode {
 
 pub struct Response {
     status_code: StatusCode,
-    headers: Vec<Header>,
+    headers: HashMap<String, String>,
     body: Vec<u8>,
 }
 
@@ -56,8 +54,8 @@ impl Response {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut buffer = vec![];
         buffer.extend_from_slice(format!("HTTP/1.1 {}\r\n", self.status_code).as_bytes());
-        for header in &self.headers {
-            buffer.extend_from_slice(format!("{}: {}\r\n", header.name, header.value).as_bytes());
+        for (name, value) in &self.headers {
+            buffer.extend_from_slice(format!("{}: {}\r\n", name, value).as_bytes());
         }
 
         buffer.extend_from_slice(b"\r\n");
@@ -68,17 +66,14 @@ impl Response {
 
 pub struct ResponseBuilder {
     status_code: StatusCode,
-    headers: Vec<Header>,
+    headers: HashMap<String, String>,
     body: Option<Vec<u8>>,
 }
 
 macro_rules! add_if_missing {
     ($name:expr, $headers:expr, $callback:expr) => {
-        if !$headers.iter().any(|h| h.name == $name) {
-            $headers.push(Header {
-                name: $name.to_string(),
-                value: $callback(),
-            });
+        if !$headers.contains_key($name) {
+            $headers.insert($name.to_string(), $callback());
         }
     };
 }
@@ -87,7 +82,7 @@ impl ResponseBuilder {
     pub fn new() -> Self {
         ResponseBuilder {
             status_code: StatusCode::InteralServerError,
-            headers: vec![],
+            headers: HashMap::new(),
             body: None,
         }
     }
@@ -98,7 +93,7 @@ impl ResponseBuilder {
     }
 
     pub fn header(mut self, name: String, value: String) -> Self {
-        self.headers.push(Header { name, value });
+        self.headers.insert(name, value);
         self
     }
 

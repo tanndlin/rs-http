@@ -62,7 +62,11 @@ fn handle_client(
 ) {
     let mut buffer = [0u8; 1024];
     loop {
-        let _ = stream.read(&mut buffer);
+        match stream.read(&mut buffer) {
+            Ok(0) => break, // Client closed connection
+            Ok(_) => (),
+            Err(_) => break,
+        }
 
         let (response, keep_alive) = match Request::from_bytes(buffer) {
             Ok(mut req) => {
@@ -73,10 +77,11 @@ fn handle_client(
                 };
                 req.path = format!("{}{}", serve_location, req.path);
 
-                let keep_alive = match req.get_header("Connection") {
-                    Some(header) => header.value == "Keep-Alive",
-                    None => false,
+                let keep_alive = match req.headers.get("Connection") {
+                    Some(value) => value == "Close",
+                    None => true,
                 };
+
                 match handle_request(&req, cache) {
                     Ok(res) => (res, keep_alive),
                     Err(e) => {
