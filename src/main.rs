@@ -3,7 +3,7 @@ use std::{
     io::{Read, Write},
     net::{TcpListener, TcpStream},
     sync::Arc,
-    thread,
+    thread::available_parallelism,
 };
 
 use crate::{
@@ -12,6 +12,8 @@ use crate::{
     response::{Response, ResponseBuilder},
     types::ContentType,
 };
+
+use threadpool::ThreadPool;
 
 mod read;
 mod request;
@@ -36,15 +38,17 @@ fn main() {
 
     let total_files = cache.len();
     let total_bytes: usize = cache.values().map(|b| b.len()).sum();
-    println!("Cached {} files.", total_files);
-    println!("Cached {total_bytes} bytes.");
+    println!("Cached {total_bytes} bytes across {total_files} files.");
+
+    let num_cores = available_parallelism().unwrap().get();
+    let pool = ThreadPool::new(num_cores);
 
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
                 let serve_path = args[1].clone().replace("\\", "/");
                 let cache_clone = cache.clone();
-                thread::spawn(move || handle_client(stream, &serve_path, &cache_clone));
+                pool.execute(move || handle_client(stream, &serve_path, &cache_clone));
             }
             Err(e) => println!("Unable to get stream from client: {e}"),
         }
