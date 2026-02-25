@@ -13,6 +13,7 @@ use crate::{
     types::ContentType,
 };
 
+use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod, SslStream};
 use threadpool::ThreadPool;
 
 mod read;
@@ -26,6 +27,23 @@ fn main() {
     if args.len() != 2 {
         panic!("Expected 1 argument (serve folder)")
     }
+
+    // Build TLS acceptor
+    let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+    builder
+        .set_private_key_file("localhost+1-key.pem", SslFiletype::PEM)
+        .unwrap();
+    builder
+        .set_certificate_chain_file("localhost+1.pem")
+        .unwrap();
+
+    // Enable HTTP/2 via ALPN
+    builder.set_alpn_select_callback(|_, client_protocols| {
+        openssl::ssl::select_next_proto(b"\x02h2\x08http/1.1", client_protocols)
+            .ok_or(openssl::ssl::AlpnError::NOACK)
+    });
+
+    let acceptor = Arc::new(builder.build());
 
     let listener = TcpListener::bind("0.0.0.0:443").expect("Unable to bind to 0.0.0.0:443");
     println!("Listening on: 0.0.0.0:443");
@@ -46,9 +64,12 @@ fn main() {
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
+                let acceptor = acceptor.clone();
+                let ssl_stream = acceptor.accept(stream).unwrap();
+
                 let serve_path = args[1].clone().replace("\\", "/");
                 let cache_clone = cache.clone();
-                pool.execute(move || handle_client(stream, &serve_path, &cache_clone));
+                pool.execute(move || handle_client(ssl_stream, &serve_path, &cache_clone));
             }
             Err(e) => println!("Unable to get stream from client: {e}"),
         }
@@ -56,7 +77,7 @@ fn main() {
 }
 
 fn handle_client(
-    mut stream: TcpStream,
+    mut stream: SslStream<TcpStream>,
     serve_location: &str,
     cache: &Arc<HashMap<String, Vec<u8>>>,
 ) {
