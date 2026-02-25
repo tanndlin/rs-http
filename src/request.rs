@@ -28,7 +28,6 @@ pub struct Request {
     pub method: Method,
     pub path: String,
     pub headers: HashMap<String, String>,
-    pub body: String,
 }
 
 impl Request {
@@ -62,14 +61,10 @@ impl Request {
             headers.insert(name, value);
         }
 
-        // Get body
-        let body = lines.collect::<Vec<&str>>().join("\n");
-
         Ok(Self {
             method: Method::from_str(&method)?,
             path,
             headers,
-            body,
         })
     }
 }
