@@ -22,7 +22,10 @@ fn main() {
         panic!("Expected 1 argument (serve folder)")
     }
 
-    let listener = TcpListener::bind("127.0.0.1:8080").expect("Unable to bind to 127.0.0.1:8080");
+    let listener = TcpListener::bind("0.0.0.0:8080").expect("Unable to bind to 0.0.0.0:8080");
+    println!("Listening on: 0.0.0.0:8080");
+    println!("Serving files from: {}", args[1]);
+
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
