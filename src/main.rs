@@ -8,13 +8,14 @@ use std::{
 };
 
 use crate::{
-    gc_buffer::GCBuffer,
-    http2::frames::{
-        data_frame::DataFrame,
-        frame::{self, Frame, FrameHeader, FrameType},
-        frame_trait::Frame as _,
-        headers_frame::{self, HeadersFrame},
-        settings_frame::{SettingsFrame, SettingsFrameFlags},
+    http2::{
+        frames::{
+            data_frame::DataFrame,
+            frame::{self, Frame, FrameHeader, FrameType},
+            headers_frame::HeadersFrame,
+            settings_frame::{SettingsFrame, SettingsFrameFlags},
+        },
+        gc_buffer::GCBuffer,
     },
     read::cache_all_files,
     request::{Method, Request},
@@ -25,7 +26,6 @@ use crate::{
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod, SslStream};
 use threadpool::ThreadPool;
 
-mod gc_buffer;
 mod http2;
 mod read;
 mod request;
