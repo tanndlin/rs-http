@@ -1,6 +1,12 @@
 use std::io::Read;
 
-use crate::http2::frames::{frame::FrameHeader, frame_trait::Frame};
+use crate::{
+    http2::frames::{
+        frame::{FrameHeader, FrameType},
+        frame_trait::Frame,
+    },
+    response::Response,
+};
 
 #[derive(Debug)]
 pub struct HeadersFrameFlags {
@@ -100,5 +106,63 @@ impl TryFrom<&[u8]> for HeadersFrame {
             weight,
             header_block_fragment,
         })
+    }
+}
+
+impl From<&Response> for HeadersFrame {
+    fn from(res: &Response) -> Self {
+        let mut bytes = vec![];
+        for (name, value) in &res.headers {
+            bytes.push((name.as_bytes(), value.as_bytes()));
+        }
+
+        let mut encoder = hpack::Encoder::new();
+        let encoded = encoder.encode(bytes);
+        let header = FrameHeader::<HeadersFrameFlags> {
+            length: encoded.len() as u32,
+            frame_type: FrameType::Headers,
+            flags: HeadersFrameFlags {
+                end_stream: false,
+                end_headers: true,
+                padded: false,
+                priority: false,
+            },
+            stream_identifier: 1,
+        };
+
+        HeadersFrame {
+            header,
+            pad_length: 0,
+            exclusive: None,
+            stream_dependency: None,
+            weight: None,
+            header_block_fragment: encoded,
+        }
+    }
+}
+
+impl From<HeadersFrame> for Vec<u8> {
+    fn from(headers_frame: HeadersFrame) -> Self {
+        let mut payload = vec![];
+
+        if headers_frame.header.flags.padded {
+            payload.push(headers_frame.pad_length);
+        }
+
+        if headers_frame.header.flags.priority {
+            payload.extend_from_slice(
+                &(headers_frame.stream_dependency.unwrap()
+                    | ((headers_frame.exclusive.unwrap() as u32) << 31))
+                    .to_be_bytes(),
+            );
+        }
+
+        if headers_frame.pad_length > 0 {
+            payload.extend(vec![0, headers_frame.pad_length]);
+        }
+
+        let mut header_bytes: Vec<u8> = headers_frame.header.into();
+        header_bytes.extend(payload);
+        header_bytes
     }
 }

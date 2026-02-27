@@ -22,7 +22,7 @@ impl Display for StatusCode {
 
 pub struct Response {
     status_code: StatusCode,
-    headers: HashMap<String, String>,
+    pub headers: HashMap<String, String>,
     body: Vec<u8>,
 }
 

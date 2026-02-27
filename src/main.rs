@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
+    str::FromStr,
     sync::Arc,
     thread::available_parallelism,
 };
@@ -127,7 +128,7 @@ fn handle_client(
             }
         };
 
-        match frame::Frame::try_from(&buffer[..read]) {
+        let req = match frame::Frame::try_from(&buffer[..read]) {
             Err(e) => {
                 dbg!(&e);
                 break;
@@ -135,9 +136,12 @@ fn handle_client(
             Ok(f) => {
                 dbg!(&f);
                 match f {
-                    Frame::DataFrame(data_frame) => handle_data_frame(data_frame),
+                    Frame::DataFrame(data_frame) => {
+                        handle_data_frame(data_frame);
+                        None
+                    }
                     Frame::HeadersFrame(headers_frame) => {
-                        handle_headers_frame(&mut stream, &headers_frame).unwrap();
+                        Some(handle_headers_frame(&mut stream, &headers_frame).unwrap())
                     }
                     Frame::SettingsFrame(settings_frame) => {
                         if settings_frame.header.flags.ack {
@@ -149,8 +153,23 @@ fn handle_client(
                         let ack = SettingsFrame::new_ack(0);
                         let bytes: Vec<u8> = ack.into();
                         let _ = stream.write(&bytes);
+                        None
                     }
                 }
+            }
+        };
+
+        if let Some(req) = req {
+            match handle_request(&req, cache) {
+                Err(e) => {
+                    dbg!(&e);
+                }
+                Ok(res) => match send_response(&mut stream, &res) {
+                    Ok(_) => (),
+                    Err(e) => {
+                        dbg!(&e);
+                    }
+                },
             }
         }
     }
@@ -165,12 +184,7 @@ fn handle_data_frame(data_frame: DataFrame) {
 fn handle_headers_frame(
     stream: &mut SslStream<TcpStream>,
     headers_frame: &HeadersFrame,
-) -> Result<(), String> {
-    // match headers_frame.header.flags.end_headers {
-    //     true => todo!(),
-    //     false => todo!(),
-    // }
-
+) -> Result<Request, String> {
     dbg!("Handling received headers frame");
 
     let mut compressed_headers = headers_frame.header_block_fragment.clone();
@@ -209,13 +223,89 @@ fn handle_headers_frame(
 
     dbg!(&decoded_headers);
 
+    let mut headers: HashMap<String, String> = HashMap::new();
     for (name, value) in decoded_headers {
         let name = String::from_utf8_lossy(&name);
         let value = String::from_utf8_lossy(&value);
-        dbg!(&name, &value);
+
+        headers.insert(name.to_string(), value.to_string());
     }
 
     let stream_ident = headers_frame.header.stream_identifier;
 
+    let method = headers.get(":method").ok_or("Missing Method Header")?;
+    let method = Method::from_str(method)?;
+    let path = headers.get(":path").ok_or("Missing Method Header")?.clone();
+
+    Ok(Request {
+        headers,
+        method,
+        path,
+    })
+}
+
+fn handle_request(
+    request: &Request,
+    cache: &Arc<HashMap<String, Vec<u8>>>,
+) -> Result<Response, String> {
+    match request.method {
+        Method::GET => handle_get(request, cache),
+        Method::HEAD => handle_head(request, cache),
+        _ => Ok(Response::method_not_allowed()),
+    }
+}
+
+fn handle_get(
+    request: &Request,
+    cache: &Arc<HashMap<String, Vec<u8>>>,
+) -> Result<Response, String> {
+    let file_extension = &request
+        .path
+        .split(".")
+        .last()
+        .ok_or("No file extension found")?;
+    let content_type = ContentType::from_extension(file_extension);
+    if content_type == ContentType::Unknown {
+        return Ok(Response::bad_request());
+    }
+
+    match cache.get(&request.path) {
+        Some(contents) => Ok(ResponseBuilder::new()
+            .status_code(response::StatusCode::Ok)
+            .header("Content-Type".to_string(), content_type.into())
+            .body(contents.clone())
+            .build()),
+        None => Ok(Response::not_found()),
+    }
+}
+
+fn handle_head(
+    request: &Request,
+    cache: &Arc<HashMap<String, Vec<u8>>>,
+) -> Result<Response, String> {
+    let file_extension = &request
+        .path
+        .split(".")
+        .last()
+        .ok_or("No file extension found")?;
+    let content_type = ContentType::from_extension(file_extension);
+    if content_type == ContentType::Unknown {
+        return Ok(Response::bad_request());
+    }
+
+    match cache.get(&request.path) {
+        Some(metadata) => Ok(ResponseBuilder::new()
+            .status_code(response::StatusCode::Ok)
+            .header("Content-Type".to_string(), content_type.into())
+            .header("Content-Length".to_string(), metadata.len().to_string())
+            .build()),
+        None => Ok(Response::not_found()),
+    }
+}
+
+fn send_response(stream: &mut SslStream<TcpStream>, res: &Response) -> Result<(), String> {
+    let headers_frame = HeadersFrame::from(res);
+    let bytes: Vec<u8> = headers_frame.into();
+    let _ = stream.write(&bytes);
     Ok(())
 }
