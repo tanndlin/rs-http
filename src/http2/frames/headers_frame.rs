@@ -112,7 +112,17 @@ impl TryFrom<&[u8]> for HeadersFrame {
 impl From<&Response> for HeadersFrame {
     fn from(res: &Response) -> Self {
         let mut bytes = vec![];
+
+        let binding = res.status_code.to_code().to_string();
+        bytes.push((":status".as_bytes(), binding.as_bytes()));
+
+        dbg!(&res.headers);
+
         for (name, value) in &res.headers {
+            match name.as_str() {
+                "status" | "Content-Length" => (),
+                _ => continue,
+            }
             bytes.push((name.as_bytes(), value.as_bytes()));
         }
 
@@ -122,7 +132,7 @@ impl From<&Response> for HeadersFrame {
             length: encoded.len() as u32,
             frame_type: FrameType::Headers,
             flags: HeadersFrameFlags {
-                end_stream: false,
+                end_stream: true,
                 end_headers: true,
                 padded: false,
                 priority: false,
@@ -155,7 +165,10 @@ impl From<HeadersFrame> for Vec<u8> {
                     | ((headers_frame.exclusive.unwrap() as u32) << 31))
                     .to_be_bytes(),
             );
+            payload.push(headers_frame.weight.unwrap());
         }
+
+        payload.extend(headers_frame.header_block_fragment);
 
         if headers_frame.pad_length > 0 {
             payload.extend(vec![0, headers_frame.pad_length]);

@@ -1,6 +1,7 @@
 use std::{collections::HashMap, str::FromStr};
 
 #[allow(clippy::upper_case_acronyms)]
+#[derive(Debug)]
 pub enum Method {
     GET,
     POST,
@@ -24,6 +25,7 @@ impl FromStr for Method {
     }
 }
 
+#[derive(Debug)]
 pub struct Request {
     pub method: Method,
     pub path: String,

@@ -20,10 +20,22 @@ impl Display for StatusCode {
     }
 }
 
+impl StatusCode {
+    pub fn to_code(&self) -> u32 {
+        match self {
+            StatusCode::Ok => 200,
+            StatusCode::NotFound => 404,
+            StatusCode::BadRequest => 400,
+            StatusCode::MethodNotAllowed => 405,
+            StatusCode::InteralServerError => 500,
+        }
+    }
+}
+
 pub struct Response {
-    status_code: StatusCode,
+    pub status_code: StatusCode,
     pub headers: HashMap<String, String>,
-    body: Vec<u8>,
+    pub body: Vec<u8>,
 }
 
 impl Response {

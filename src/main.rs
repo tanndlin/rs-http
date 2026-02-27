@@ -76,20 +76,15 @@ fn main() {
                 let acceptor = acceptor.clone();
                 let ssl_stream = acceptor.accept(stream).unwrap();
 
-                let serve_path = args[1].clone().replace("\\", "/");
                 let cache_clone = cache.clone();
-                pool.execute(move || handle_client(ssl_stream, &serve_path, &cache_clone));
+                pool.execute(move || handle_client(ssl_stream, &cache_clone));
             }
             Err(e) => println!("Unable to get stream from client: {e}"),
         }
     }
 }
 
-fn handle_client(
-    mut stream: SslStream<TcpStream>,
-    serve_location: &str,
-    cache: &Arc<HashMap<String, Vec<u8>>>,
-) {
+fn handle_client(mut stream: SslStream<TcpStream>, cache: &Arc<HashMap<String, Vec<u8>>>) {
     // Should start with the HTTP/2 Connection Preface
 
     let mut preface = [0; 24];
@@ -248,6 +243,9 @@ fn handle_request(
     request: &Request,
     cache: &Arc<HashMap<String, Vec<u8>>>,
 ) -> Result<Response, String> {
+    println!("Got request");
+    dbg!(&request);
+
     match request.method {
         Method::GET => handle_get(request, cache),
         Method::HEAD => handle_head(request, cache),
@@ -259,17 +257,21 @@ fn handle_get(
     request: &Request,
     cache: &Arc<HashMap<String, Vec<u8>>>,
 ) -> Result<Response, String> {
-    let file_extension = &request
-        .path
-        .split(".")
-        .last()
-        .ok_or("No file extension found")?;
+    let path = if &request.path == "/" {
+        "index.html"
+    } else {
+        &request.path
+    };
+
+    dbg!(&path);
+
+    let file_extension = path.split(".").last().ok_or("No file extension found")?;
     let content_type = ContentType::from_extension(file_extension);
     if content_type == ContentType::Unknown {
         return Ok(Response::bad_request());
     }
 
-    match cache.get(&request.path) {
+    match cache.get(path) {
         Some(contents) => Ok(ResponseBuilder::new()
             .status_code(response::StatusCode::Ok)
             .header("Content-Type".to_string(), content_type.into())
@@ -283,17 +285,19 @@ fn handle_head(
     request: &Request,
     cache: &Arc<HashMap<String, Vec<u8>>>,
 ) -> Result<Response, String> {
-    let file_extension = &request
-        .path
-        .split(".")
-        .last()
-        .ok_or("No file extension found")?;
+    let path = if &request.path == "/" {
+        "index.html"
+    } else {
+        &request.path
+    };
+
+    let file_extension = path.split(".").last().ok_or("No file extension found")?;
     let content_type = ContentType::from_extension(file_extension);
     if content_type == ContentType::Unknown {
         return Ok(Response::bad_request());
     }
 
-    match cache.get(&request.path) {
+    match cache.get(path) {
         Some(metadata) => Ok(ResponseBuilder::new()
             .status_code(response::StatusCode::Ok)
             .header("Content-Type".to_string(), content_type.into())
@@ -304,8 +308,14 @@ fn handle_head(
 }
 
 fn send_response(stream: &mut SslStream<TcpStream>, res: &Response) -> Result<(), String> {
+    dbg!(&res.body);
+
     let headers_frame = HeadersFrame::from(res);
     let bytes: Vec<u8> = headers_frame.into();
+    let _ = stream.write(&bytes);
+
+    let data_frame = DataFrame::from(res);
+    let bytes: Vec<u8> = data_frame.into();
     let _ = stream.write(&bytes);
     Ok(())
 }

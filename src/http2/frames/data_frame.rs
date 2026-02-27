@@ -1,6 +1,12 @@
 use std::io::Read;
 
-use crate::http2::frames::{frame::FrameHeader, frame_trait::Frame};
+use crate::{
+    http2::frames::{
+        frame::{FrameHeader, FrameType},
+        frame_trait::Frame,
+    },
+    response::Response,
+};
 
 #[derive(Debug)]
 pub struct DataFrameFlags {
@@ -14,6 +20,19 @@ impl From<u8> for DataFrameFlags {
             padding: bits & 8 > 0,    // bit 3
             end_stream: bits & 1 > 0, // bit 0
         }
+    }
+}
+
+impl From<DataFrameFlags> for u8 {
+    fn from(flags: DataFrameFlags) -> Self {
+        let mut bits = 0u8;
+        if flags.padding {
+            bits |= 8; // bit 3
+        }
+        if flags.end_stream {
+            bits |= 1; // bit 0
+        }
+        bits
     }
 }
 
@@ -55,5 +74,42 @@ impl TryFrom<&[u8]> for DataFrame {
             pad_length,
             data,
         })
+    }
+}
+
+impl From<&Response> for DataFrame {
+    fn from(res: &Response) -> Self {
+        Self {
+            header: FrameHeader {
+                length: res.body.len() as u32,
+                frame_type: FrameType::Data,
+                flags: DataFrameFlags {
+                    padding: false,
+                    end_stream: true,
+                },
+                stream_identifier: 1, // TODO
+            },
+            pad_length: 0,
+            data: res.body.clone(),
+        }
+    }
+}
+
+impl From<DataFrame> for Vec<u8> {
+    fn from(data_frame: DataFrame) -> Self {
+        let mut payload = vec![];
+        if data_frame.header.flags.padding {
+            payload.push(data_frame.pad_length)
+        }
+
+        payload.extend(data_frame.data);
+
+        if data_frame.pad_length > 0 {
+            payload.extend(vec![0; data_frame.pad_length as usize])
+        }
+
+        let mut header_bytes: Vec<u8> = data_frame.header.into();
+        header_bytes.extend(payload);
+        header_bytes
     }
 }
