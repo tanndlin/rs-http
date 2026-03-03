@@ -74,7 +74,7 @@ impl TryFrom<&[u8]> for HeadersFrame {
         let pad_length = if header.flags.padded {
             let val = buf[0];
             buf = &buf[1..];
-            frag_length -= 1;
+            frag_length -= 1 + val as usize;
             val
         } else {
             0
