@@ -71,6 +71,21 @@ impl TryFrom<&[u8]> for Frame {
     }
 }
 
+impl Frame {
+    pub fn get_stream_id(&self) -> u32 {
+        match self {
+            Frame::Data(f) => f.header.stream_id,
+            Frame::Headers(f) => f.header.stream_id,
+            Frame::Priority(f) => f.header.stream_id,
+            Frame::RstStream(f) => f.header.stream_id,
+            Frame::Settings(f) => f.header.stream_id,
+            Frame::PushPromise(f) => f.header.stream_id,
+            Frame::Ping(f) => f.header.stream_id,
+            Frame::GoAway(f) => f.header.stream_id,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct FrameHeader<T>
 where

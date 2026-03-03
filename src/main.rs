@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
+    ops::ControlFlow,
     str::FromStr,
     sync::Arc,
     thread::available_parallelism,
@@ -10,15 +11,19 @@ use std::{
 use crate::{
     http2::{
         connection_state::ConnectionState,
+        error::HTTP2Error,
         frames::{
             continuation_frame::ContinuationFrame,
             data_frame::DataFrame,
             frame::{self, Frame, FrameHeader, FrameType},
+            go_away_frame::GoAwayFrame,
             headers_frame::HeadersFrame,
             ping_frame::PingFrame,
+            rst_frame::RstFrame,
             settings_frame::{SettingsFrame, SettingsFrameFlags},
         },
         gc_buffer::GCBuffer,
+        stream::http_stream::HTTP2Stream,
     },
     read::cache_all_files,
     request::{Method, Request},
@@ -77,11 +82,11 @@ fn main() {
     let num_cores = available_parallelism().unwrap().get();
     let pool = ThreadPool::new(num_cores);
 
-    for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
+    for tcp_stream in listener.incoming() {
+        match tcp_stream {
+            Ok(tcp_stream) => {
                 let acceptor = acceptor.clone();
-                let ssl_stream = acceptor.accept(stream).unwrap();
+                let ssl_stream = acceptor.accept(tcp_stream).unwrap();
 
                 let cache_clone = cache.clone();
                 pool.execute(move || handle_client(ssl_stream, &cache_clone));
@@ -91,12 +96,13 @@ fn main() {
     }
 }
 
-fn handle_client(mut stream: SslStream<TcpStream>, cache: &Arc<HashMap<String, Vec<u8>>>) {
+fn handle_client(mut tcp_stream: SslStream<TcpStream>, cache: &Arc<HashMap<String, Vec<u8>>>) {
     let mut state = ConnectionState::new();
+    let mut streams: HashMap<u32, HTTP2Stream> = HashMap::new();
 
     // Should start with the HTTP/2 Connection Preface
     let mut preface = [0; 24];
-    let _ = stream.read_exact(&mut preface).unwrap();
+    let _ = tcp_stream.read_exact(&mut preface).unwrap();
     if preface != b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"[..] {
         return;
     }
@@ -105,7 +111,7 @@ fn handle_client(mut stream: SslStream<TcpStream>, cache: &Arc<HashMap<String, V
 
     let mut buffer = GCBuffer::new();
     loop {
-        match buffer.read_from_stream(&mut stream) {
+        match buffer.read_from_stream(&mut tcp_stream) {
             Ok(0) => {
                 dbg!("Client closed connection");
                 break;
@@ -129,110 +135,83 @@ fn handle_client(mut stream: SslStream<TcpStream>, cache: &Arc<HashMap<String, V
 
         println!("Parsing frame of length {full_frame_length}");
 
-        let req = match frame::Frame::try_from(&buffer.read_n_bytes(full_frame_length)[..]) {
+        let result = match frame::Frame::try_from(&buffer.read_n_bytes(full_frame_length)[..]) {
             Err(e) => {
                 dbg!(&e);
                 break;
             }
             Ok(f) => {
                 dbg!(&f);
+                let stream = streams
+                    .entry(f.get_stream_id())
+                    .or_insert_with(|| HTTP2Stream::new(f.get_stream_id()));
+
                 match f {
-                    Frame::Data(data_frame) => {
-                        handle_data_frame(data_frame);
-                        None
-                    }
-                    Frame::Headers(headers_frame) => {
-                        Some(handle_headers_frame(&mut buffer, &headers_frame, &mut state).unwrap())
-                    }
                     Frame::Settings(settings_frame) => {
-                        if settings_frame.header.flags.ack {
-                            continue;
-                        }
-
-                        let stream_id = settings_frame.header.stream_id;
-
-                        // Send my settings
-                        // TODO: Make a builder or something for SettingsFrame instantiation
-                        let header = FrameHeader::<SettingsFrameFlags> {
-                            length: 0,
-                            frame_type: FrameType::Settings,
-                            flags: SettingsFrameFlags { ack: false },
-                            stream_id,
-                        };
-                        let frame_bytes: Vec<u8> = header.into();
-                        let _ = stream.write(&frame_bytes);
-
-                        // Send ack
-                        let ack = SettingsFrame::new_ack(0);
-                        let bytes: Vec<u8> = ack.into();
-                        let _ = stream.write(&bytes);
-                        None
+                        handle_settings_frame(&mut tcp_stream, settings_frame)
                     }
-                    Frame::Ping(ping_frame) => {
-                        if !ping_frame.header.flags.ack {
-                            let ack = PingFrame::ack();
-                            let bytes: Vec<u8> = ack.into();
-                            let _ = stream.write(&bytes);
-                        }
-
-                        None
-                    }
-                    Frame::Priority(priority_frame) => handle_priority_frame(priority_frame),
-                    Frame::RstStream(rst_frame) => handle_rst_frame(rst_frame),
-                    Frame::PushPromise(push_promise_frame) => {
-                        handle_push_promise(push_promise_frame)
-                    }
-                    Frame::GoAway(go_away_frame) => handle_go_away_frame(go_away_frame),
+                    Frame::Ping(ping_frame) => handle_ping_frame(&mut tcp_stream, ping_frame),
+                    _ => stream.handle_frame(f),
                 }
             }
         };
 
-        if let Some(req) = req {
-            match handle_request(&req, cache) {
-                Err(e) => {
-                    dbg!(&e);
-                }
-                Ok(res) => match send_response(&mut stream, &res, &mut state) {
-                    Ok(_) => (),
-                    Err(e) => {
-                        dbg!(&e);
-                    }
-                },
+        match result {
+            Ok(bytes) => {
+                let _ = tcp_stream.write(&bytes);
             }
+            Err(e) => match e {
+                HTTP2Error::Connection(e) => {
+                    let go_away = GoAwayFrame::from(e);
+                    let bytes: Vec<u8> = go_away.into();
+                    let _ = tcp_stream.write(&bytes);
+                }
+                HTTP2Error::Stream(e) => {
+                    let rst = RstFrame::from(e);
+                    let bytes: Vec<u8> = rst.into();
+                    let _ = tcp_stream.write(&bytes);
+                }
+            },
         }
     }
 
     println!("Outside read loop");
 }
 
-fn handle_go_away_frame(
-    go_away_frame: http2::frames::go_away_frame::GoAwayFrame,
-) -> Option<Request> {
-    println!("Recv go away");
-    None
+fn handle_settings_frame(
+    tcp_stream: &mut SslStream<TcpStream>,
+    settings_frame: SettingsFrame,
+) -> Result<Vec<u8>, HTTP2Error> {
+    if settings_frame.header.flags.ack {
+        return Ok(vec![]);
+    }
+
+    let stream_id = settings_frame.header.stream_id;
+    let header = FrameHeader::<SettingsFrameFlags> {
+        length: 0,
+        frame_type: FrameType::Settings,
+        flags: SettingsFrameFlags { ack: false },
+        stream_id,
+    };
+    let frame_bytes: Vec<u8> = header.into();
+    let _ = tcp_stream.write(&frame_bytes);
+    let ack = SettingsFrame::new_ack(0);
+    let bytes: Vec<u8> = ack.into();
+    let _ = tcp_stream.write(&bytes);
+
+    Ok(vec![])
 }
 
-fn handle_push_promise(
-    push_promise_frame: http2::frames::push_promise_frame::PushPromiseFrame,
-) -> Option<Request> {
-    println!("Recv push promise");
-    None
-}
-
-fn handle_rst_frame(rst_frame: http2::frames::rst_frame::RstFrame) -> Option<Request> {
-    println!("recv rst frame");
-    None
-}
-
-fn handle_priority_frame(
-    priority_frame: http2::frames::priority_frame::PriorityFrame,
-) -> Option<Request> {
-    println!("recv prio frame");
-    None
-}
-
-fn handle_data_frame(data_frame: DataFrame) {
-    println!("Received data frame");
+fn handle_ping_frame(
+    tcp_stream: &mut SslStream<TcpStream>,
+    ping_frame: PingFrame,
+) -> Result<Vec<u8>, HTTP2Error> {
+    if !ping_frame.header.flags.ack {
+        let ack = PingFrame::ack();
+        let bytes: Vec<u8> = ack.into();
+        let _ = tcp_stream.write(&bytes);
+    }
+    Ok(vec![])
 }
 
 fn handle_headers_frame(
@@ -355,16 +334,16 @@ fn handle_head(
 }
 
 fn send_response(
-    stream: &mut SslStream<TcpStream>,
+    tcp_stream: &mut SslStream<TcpStream>,
     res: &Response,
     state: &mut ConnectionState,
 ) -> Result<(), String> {
     let headers_frame = HeadersFrame::from((res, state));
     let bytes: Vec<u8> = headers_frame.into();
-    let _ = stream.write(&bytes);
+    let _ = tcp_stream.write(&bytes);
 
     let data_frame = DataFrame::from(res);
     let bytes: Vec<u8> = data_frame.into();
-    let _ = stream.write(&bytes);
+    let _ = tcp_stream.write(&bytes);
     Ok(())
 }

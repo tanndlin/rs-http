@@ -11,7 +11,7 @@ impl From<u8> for PriorityFrameFlags {
 
 #[derive(Debug)]
 pub struct PriorityFrame {
-    header: FrameHeader<PriorityFrameFlags>,
+    pub header: FrameHeader<PriorityFrameFlags>,
     pub exclusive: bool,        // 1 bit
     pub stream_dependency: u32, // 31 bits
     pub weight: u8,             // 8 bits

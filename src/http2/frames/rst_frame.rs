@@ -1,4 +1,7 @@
-use crate::http2::frames::frame::{FrameHeader, FrameType};
+use crate::http2::{
+    error::{HTTP2ErrorCode, StreamError},
+    frames::frame::{FrameHeader, FrameType},
+};
 
 #[derive(Debug)]
 pub struct RstFrame {
@@ -7,16 +10,27 @@ pub struct RstFrame {
 }
 
 impl RstFrame {
-    pub fn new(stream_id: u32, error_code: u32) -> Self {
+    pub fn new(stream_id: u32, e: HTTP2ErrorCode) -> Self {
         Self {
             header: FrameHeader {
-                length: 8,
+                length: 0,
                 frame_type: FrameType::RstStream,
                 flags: 0,
                 stream_id,
             },
-            error_code,
+            error_code: e as u32,
         }
+    }
+}
+
+impl From<StreamError> for RstFrame {
+    fn from(e: StreamError) -> Self {
+        let StreamError {
+            stream_id,
+            error_code,
+        } = e;
+
+        RstFrame::new(stream_id, error_code)
     }
 }
 

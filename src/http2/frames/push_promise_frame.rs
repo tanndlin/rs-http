@@ -20,7 +20,7 @@ impl From<u8> for PushPromiseFrameFlags {
 
 #[derive(Debug)]
 pub struct PushPromiseFrame {
-    header: FrameHeader<PushPromiseFrameFlags>,
+    pub header: FrameHeader<PushPromiseFrameFlags>,
     pad_length: u8,
     stream_id: u32, // 31 bits
     header_block_fragment: Vec<u8>,
