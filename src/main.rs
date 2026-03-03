@@ -179,6 +179,9 @@ fn handle_client(mut stream: SslStream<TcpStream>, cache: &Arc<HashMap<String, V
                     }
                     Frame::Priority(priority_frame) => handle_priority_frame(priority_frame),
                     Frame::RstStream(rst_frame) => handle_rst_frame(rst_frame),
+                    Frame::PushPromise(push_promise_frame) => {
+                        handle_push_promise(push_promise_frame)
+                    }
                 }
             }
         };
@@ -199,6 +202,13 @@ fn handle_client(mut stream: SslStream<TcpStream>, cache: &Arc<HashMap<String, V
     }
 
     println!("Outside read loop");
+}
+
+fn handle_push_promise(
+    push_promise_frame: http2::frames::push_promise_frame::PushPromiseFrame,
+) -> Option<Request> {
+    println!("Recv push promise");
+    None
 }
 
 fn handle_rst_frame(rst_frame: http2::frames::rst_frame::RstFrame) -> Option<Request> {

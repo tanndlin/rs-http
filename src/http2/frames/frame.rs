@@ -1,6 +1,7 @@
 use crate::http2::frames::{
     data_frame::DataFrame, headers_frame::HeadersFrame, ping_frame::PingFrame,
-    priority_frame::PriorityFrame, rst_frame::RstFrame, settings_frame::SettingsFrame,
+    priority_frame::PriorityFrame, push_promise_frame::PushPromiseFrame, rst_frame::RstFrame,
+    settings_frame::SettingsFrame,
 };
 
 #[repr(u8)]
@@ -12,6 +13,7 @@ pub enum FrameType {
     Priority = 2,
     RstStream = 3,
     Settings = 4,
+    PushPromise = 5,
     Ping = 6,
 }
 
@@ -23,6 +25,7 @@ impl From<u8> for FrameType {
             2 => FrameType::Priority,
             3 => FrameType::RstStream,
             4 => FrameType::Settings,
+            5 => FrameType::PushPromise,
             6 => FrameType::Ping,
             _ => FrameType::Data, // TODO: Verify if I should panic or discard
         }
@@ -36,6 +39,7 @@ pub enum Frame {
     Priority(PriorityFrame),
     RstStream(RstFrame),
     Settings(SettingsFrame),
+    PushPromise(PushPromiseFrame),
     Ping(PingFrame),
 }
 
@@ -57,6 +61,7 @@ impl TryFrom<&[u8]> for Frame {
             FrameType::Priority => Frame::Priority(PriorityFrame::try_from(buf)?),
             FrameType::RstStream => Frame::RstStream(RstFrame::try_from(buf)?),
             FrameType::Settings => Frame::Settings(SettingsFrame::try_from(buf)?),
+            FrameType::PushPromise => Frame::PushPromise(PushPromiseFrame::try_from(buf)?),
             FrameType::Ping => Frame::Ping(PingFrame::try_from(buf)?),
         })
     }
