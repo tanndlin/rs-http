@@ -218,6 +218,9 @@ fn handle_settings_frame(settings_frame: &SettingsFrame) -> Result<Vec<u8>, HTTP
         return Ok(vec![]);
     }
 
+    let ack = SettingsFrame::new_ack(0);
+    let mut ret: Vec<u8> = ack.into();
+
     let my_settings = SettingsFrameBuilder::new()
         .enable_push(false)
         .header_table_size(4096)
@@ -228,13 +231,9 @@ fn handle_settings_frame(settings_frame: &SettingsFrame) -> Result<Vec<u8>, HTTP
         .build();
 
     dbg!(&my_settings);
-    let mut frame_bytes: Vec<u8> = my_settings.into();
 
-    let ack = SettingsFrame::new_ack(0);
-    let ack_bytes: Vec<u8> = ack.into();
-
-    frame_bytes.extend_from_slice(&ack_bytes);
-    Ok(frame_bytes)
+    ret.extend(Vec::<u8>::from(my_settings));
+    Ok(ret)
 }
 
 fn handle_ping_frame(

@@ -1,7 +1,10 @@
-use crate::http2::frames::{
-    data_frame::DataFrame, go_away_frame::GoAwayFrame, headers_frame::HeadersFrame,
-    ping_frame::PingFrame, priority_frame::PriorityFrame, push_promise_frame::PushPromiseFrame,
-    rst_frame::RstFrame, settings_frame::SettingsFrame, window_update_frame::WindowUpdateFrame,
+use crate::http2::{
+    error::{HTTP2Error, HTTP2ErrorCode},
+    frames::{
+        data_frame::DataFrame, go_away_frame::GoAwayFrame, headers_frame::HeadersFrame,
+        ping_frame::PingFrame, priority_frame::PriorityFrame, push_promise_frame::PushPromiseFrame,
+        rst_frame::RstFrame, settings_frame::SettingsFrame, window_update_frame::WindowUpdateFrame,
+    },
 };
 
 #[repr(u8)]
@@ -49,27 +52,52 @@ pub enum Frame {
 }
 
 impl TryFrom<&[u8]> for Frame {
-    type Error = String;
+    type Error = HTTP2Error;
 
     fn try_from(buf: &[u8]) -> Result<Self, Self::Error> {
-        if buf.len() < 9 {
-            return Err(
-                "Tried to parse frame but buffer was less than 9 bytes for frame header"
-                    .to_string(),
-            );
-        }
+        assert!(
+            buf.len() >= 9,
+            "Tried to parse frame but buffer was less than 9 bytes for frame header"
+        );
 
         let frame_type = FrameType::from(buf[3]);
         Ok(match frame_type {
-            FrameType::Data => Frame::Data(DataFrame::try_from(buf)?),
-            FrameType::Headers => Frame::Headers(HeadersFrame::try_from(buf)?),
-            FrameType::Priority => Frame::Priority(PriorityFrame::try_from(buf)?),
-            FrameType::RstStream => Frame::RstStream(RstFrame::try_from(buf)?),
-            FrameType::Settings => Frame::Settings(SettingsFrame::try_from(buf)?),
-            FrameType::PushPromise => Frame::PushPromise(PushPromiseFrame::try_from(buf)?),
-            FrameType::Ping => Frame::Ping(PingFrame::try_from(buf)?),
-            FrameType::GoAway => Frame::GoAway(GoAwayFrame::try_from(buf)?),
-            FrameType::WindowUpdate => Frame::WindowUpdate(WindowUpdateFrame::try_from(buf)?),
+            FrameType::Data => Frame::Data(
+                DataFrame::try_from(buf)
+                    .map_err(|_| HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError))?,
+            ),
+            FrameType::Headers => Frame::Headers(
+                HeadersFrame::try_from(buf)
+                    .map_err(|_| HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError))?,
+            ),
+            FrameType::Priority => Frame::Priority(
+                PriorityFrame::try_from(buf)
+                    .map_err(|_| HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError))?,
+            ),
+            FrameType::RstStream => Frame::RstStream(
+                RstFrame::try_from(buf)
+                    .map_err(|_| HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError))?,
+            ),
+            FrameType::Settings => Frame::Settings(
+                SettingsFrame::try_from(buf)
+                    .map_err(|_| HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError))?,
+            ),
+            FrameType::PushPromise => Frame::PushPromise(
+                PushPromiseFrame::try_from(buf)
+                    .map_err(|_| HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError))?,
+            ),
+            FrameType::Ping => Frame::Ping(
+                PingFrame::try_from(buf)
+                    .map_err(|_| HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError))?,
+            ),
+            FrameType::GoAway => Frame::GoAway(
+                GoAwayFrame::try_from(buf)
+                    .map_err(|_| HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError))?,
+            ),
+            FrameType::WindowUpdate => Frame::WindowUpdate(
+                WindowUpdateFrame::try_from(buf)
+                    .map_err(|_| HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError))?,
+            ),
         })
     }
 }

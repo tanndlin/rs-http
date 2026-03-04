@@ -1,4 +1,7 @@
-use crate::http2::frames::frame::{FrameHeader, FrameType};
+use crate::http2::{
+    error::{HTTP2Error, HTTP2ErrorCode},
+    frames::frame::{FrameHeader, FrameType},
+};
 
 #[derive(Debug, Default)]
 pub struct SettingsFrameFlags {
@@ -71,21 +74,21 @@ impl SettingsFrame {
 }
 
 impl TryFrom<&[u8]> for SettingsFrame {
-    type Error = String;
+    type Error = HTTP2Error;
 
     fn try_from(buf: &[u8]) -> Result<Self, Self::Error> {
-        let header = FrameHeader::try_from(buf)?;
+        let header = FrameHeader::try_from(buf)
+            .map_err(|_| HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError))?; // TODO: This is not a protocol error in the spec; but we'll say that for now
         let length = header.length as usize;
         let buf = &buf[9..];
-        if buf.len() < length {
-            return Err(format!(
-                "Settings frame length does not match the length in the frame header. {} out of {length} bytes left",
-                buf.len()
-            ));
-        }
+        assert!(
+            buf.len() >= length,
+            "Settings frame length does not match the length in the frame header. {} out of {length} bytes left",
+            buf.len()
+        );
 
         if !length.is_multiple_of(6) {
-            return Err("Settins frame length must be a multiple of 6".to_string());
+            return Err(HTTP2Error::Connection(HTTP2ErrorCode::FrameSizeError));
         }
 
         let mut ret = Self {
@@ -94,23 +97,34 @@ impl TryFrom<&[u8]> for SettingsFrame {
         };
         let mut offset = 0;
         while offset < length {
-            let ident = u16::from_be_bytes(
-                buf[offset..offset + 2]
-                    .try_into()
-                    .map_err(|_| "Invalid data length")?,
-            );
-            let ident = SettingsIdentifier::try_from(ident)?;
-            let value = u32::from_be_bytes(buf[offset + 2..offset + 6].try_into().unwrap());
-
-            match ident {
-                SettingsIdentifier::HeaderTableSize => ret.header_table_size = Some(value),
-                SettingsIdentifier::EnablePush => ret.enable_push = Some(value > 0),
-                SettingsIdentifier::MaxConcurrentStreams => {
-                    ret.max_concurrent_streams = Some(value);
+            let ident = u16::from_be_bytes(buf[offset..offset + 2].try_into().unwrap());
+            if let Ok(ident) = SettingsIdentifier::try_from(ident) {
+                let value = u32::from_be_bytes(buf[offset + 2..offset + 6].try_into().unwrap());
+                match ident {
+                    SettingsIdentifier::HeaderTableSize => ret.header_table_size = Some(value),
+                    SettingsIdentifier::EnablePush => {
+                        if !(value == 0 || value == 1) {
+                            return Err(HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError));
+                        }
+                        ret.enable_push = Some(value > 0);
+                    }
+                    SettingsIdentifier::MaxConcurrentStreams => {
+                        ret.max_concurrent_streams = Some(value);
+                    }
+                    SettingsIdentifier::InitialWindowSize => {
+                        if value > 2u32.pow(31) - 1 {
+                            return Err(HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError));
+                        }
+                        ret.initial_window_size = Some(value);
+                    }
+                    SettingsIdentifier::MaxFrameSize => {
+                        if value < 2u32.pow(14) || value > 2u32.pow(24) - 1 {
+                            return Err(HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError));
+                        }
+                        ret.max_frame_size = Some(value);
+                    }
+                    SettingsIdentifier::MaxHeaderListSize => ret.max_header_list_size = Some(value),
                 }
-                SettingsIdentifier::InitialWindowSize => ret.initial_window_size = Some(value),
-                SettingsIdentifier::MaxFrameSize => ret.max_frame_size = Some(value),
-                SettingsIdentifier::MaxHeaderListSize => ret.max_header_list_size = Some(value),
             }
 
             offset += 6;
