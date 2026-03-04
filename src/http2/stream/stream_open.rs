@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use crate::{
+    encode_to::EncodeTo,
     http2::{
         connection_state::ConnectionState,
         error::{HTTP2Error, HTTP2ErrorCode},
@@ -36,8 +37,8 @@ impl HTTP2StreamOpen {
         state: &mut ConnectionState,
     ) -> Result<(HTTP2Stream, Vec<u8>), (HTTP2Stream, HTTP2Error)> {
         match frame {
-            Frame::Data(data_frame) => self.handle_data_frame(state, &data_frame),
-            Frame::Headers(headers_frame) => self.handle_headers_frame(state, &headers_frame),
+            Frame::Data(data_frame) => self.handle_data_frame(state, data_frame),
+            Frame::Headers(headers_frame) => self.handle_headers_frame(state, headers_frame),
             _ => todo!(),
         }
     }
@@ -45,7 +46,7 @@ impl HTTP2StreamOpen {
     fn handle_data_frame(
         mut self,
         state: &mut ConnectionState,
-        data_frame: &DataFrame,
+        data_frame: DataFrame,
     ) -> Result<(HTTP2Stream, Vec<u8>), (HTTP2Stream, HTTP2Error)> {
         println!("Handling data frame for stream {}", self.id);
         let Some(mut req) = self.pending_request.take() else {
@@ -55,7 +56,7 @@ impl HTTP2StreamOpen {
             ));
         };
 
-        req.body.extend_from_slice(&data_frame.data);
+        req.body.extend(data_frame.data);
         if data_frame.header.flags.end_stream {
             let Some(res) = handle_request(&req).ok() else {
                 return Err((
@@ -65,15 +66,13 @@ impl HTTP2StreamOpen {
             };
             dbg!(&res);
 
-            let mut bytes = vec![];
             let headers_frame = HeadersFrame::from((&res, state));
             dbg!(&headers_frame);
-            let header_bytes: Vec<u8> = headers_frame.into();
-            bytes.extend_from_slice(&header_bytes);
             let data_frame = DataFrame::from(&res);
             dbg!(&data_frame);
-            let data_frame_bytes: Vec<u8> = data_frame.into();
-            bytes.extend_from_slice(&data_frame_bytes);
+
+            let mut bytes = headers_frame.to_bytes();
+            data_frame.encode_to(&mut bytes);
             Ok((self.close(true), bytes))
         } else {
             Ok((HTTP2Stream::Open(self), vec![]))
@@ -83,11 +82,11 @@ impl HTTP2StreamOpen {
     fn handle_headers_frame(
         mut self,
         state: &mut ConnectionState,
-        headers_frame: &HeadersFrame,
+        headers_frame: HeadersFrame,
     ) -> Result<(HTTP2Stream, Vec<u8>), (HTTP2Stream, HTTP2Error)> {
         println!("Handling headers frame for stream {}", self.id);
         self.header_builder
-            .new_fragment(&headers_frame.header_block_fragment);
+            .new_fragment(headers_frame.header_block_fragment);
         if !headers_frame.header.flags.end_headers {
             todo!("Implement continuation headers")
         }
@@ -144,13 +143,10 @@ impl HTTP2StreamOpen {
             ));
         };
 
-        let mut bytes = vec![];
         let headers_frame = HeadersFrame::from((&res, state));
-        let header_bytes: Vec<u8> = headers_frame.into();
-        bytes.extend_from_slice(&header_bytes);
         let data_frame = DataFrame::from(&res);
-        let data_frame_bytes: Vec<u8> = data_frame.into();
-        bytes.extend_from_slice(&data_frame_bytes);
+        let mut bytes = headers_frame.to_bytes();
+        data_frame.encode_to(&mut bytes);
         Ok((self.close(end_stream), bytes))
     }
 

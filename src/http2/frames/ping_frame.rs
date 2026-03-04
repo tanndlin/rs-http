@@ -1,4 +1,7 @@
-use crate::http2::frames::frame::{FrameHeader, FrameType};
+use crate::{
+    encode_to::EncodeTo,
+    http2::frames::frame::{FrameHeader, FrameType},
+};
 
 #[derive(Debug)]
 pub struct PingFrameFlags {
@@ -50,12 +53,9 @@ impl TryFrom<&[u8]> for PingFrame {
     }
 }
 
-impl From<PingFrame> for Vec<u8> {
-    fn from(frame: PingFrame) -> Self {
-        let mut ret = vec![];
-        let header_bytes: Vec<u8> = frame.header.into();
-        ret.extend_from_slice(&header_bytes);
-        ret.extend(frame.data);
-        ret
+impl EncodeTo for PingFrame {
+    fn encode_to(self, buf: &mut Vec<u8>) {
+        self.header.encode_to(buf);
+        buf.extend(self.data);
     }
 }

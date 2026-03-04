@@ -1,6 +1,7 @@
 use std::io::Read;
 
 use crate::{
+    encode_to::EncodeTo,
     http2::frames::frame::{FrameHeader, FrameType},
     response::Response,
 };
@@ -87,21 +88,19 @@ impl From<&Response> for DataFrame {
     }
 }
 
-impl From<DataFrame> for Vec<u8> {
-    fn from(data_frame: DataFrame) -> Self {
-        let mut payload = vec![];
-        if data_frame.header.flags.padding {
-            payload.push(data_frame.pad_length);
+impl EncodeTo for DataFrame {
+    fn encode_to(self, buf: &mut Vec<u8>) {
+        let padding = self.header.flags.padding;
+        self.header.encode_to(buf);
+
+        if padding {
+            buf.push(self.pad_length);
         }
 
-        payload.extend(data_frame.data);
+        buf.extend(self.data);
 
-        if data_frame.pad_length > 0 {
-            payload.extend(vec![0; data_frame.pad_length as usize]);
+        if self.pad_length > 0 {
+            buf.extend(vec![0; self.pad_length as usize]);
         }
-
-        let mut header_bytes: Vec<u8> = data_frame.header.into();
-        header_bytes.extend(payload);
-        header_bytes
     }
 }

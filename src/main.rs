@@ -1,5 +1,3 @@
-// #![allow(clippy::unused)]
-
 use std::{
     collections::HashMap,
     io::{Read, Write},
@@ -9,6 +7,7 @@ use std::{
 };
 
 use crate::{
+    encode_to::EncodeTo,
     http2::{
         connection_state::ConnectionState,
         error::{HTTP2Error, HTTP2ErrorCode},
@@ -28,6 +27,7 @@ use crate::{
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod, SslStream};
 use threadpool::ThreadPool;
 
+mod encode_to;
 mod http2;
 mod read;
 mod request;
@@ -151,8 +151,7 @@ fn handle_client(mut tcp_stream: SslStream<TcpStream>) {
                                 || stream_id < streams.keys().copied().max().unwrap_or(0)
                             {
                                 let go_away = GoAwayFrame::from(HTTP2ErrorCode::ProtocolError);
-                                let bytes: Vec<u8> = go_away.into();
-                                let _ = tcp_stream.write(&bytes);
+                                let _ = tcp_stream.write(&go_away.to_bytes());
                                 return;
                             }
 
@@ -165,8 +164,7 @@ fn handle_client(mut tcp_stream: SslStream<TcpStream>) {
                                 "Received frame larger than max frame size, sending GOAWAY and closing connection"
                             );
                             let go_away = GoAwayFrame::from(HTTP2ErrorCode::FrameSizeError);
-                            let bytes: Vec<u8> = go_away.into();
-                            let _ = tcp_stream.write(&bytes);
+                            let _ = tcp_stream.write(&go_away.to_bytes());
                             return;
                         }
 
@@ -194,13 +192,11 @@ fn handle_client(mut tcp_stream: SslStream<TcpStream>) {
             Err(e) => match e {
                 HTTP2Error::Connection(e) => {
                     let go_away = GoAwayFrame::from(e);
-                    let bytes: Vec<u8> = go_away.into();
-                    let _ = tcp_stream.write(&bytes);
+                    let _ = tcp_stream.write(&go_away.to_bytes());
                 }
                 HTTP2Error::Stream(e) => {
                     let rst = RstFrame::from(e);
-                    let bytes: Vec<u8> = rst.into();
-                    let _ = tcp_stream.write(&bytes);
+                    let _ = tcp_stream.write(&rst.to_bytes());
                 }
             },
         }
@@ -219,7 +215,7 @@ fn handle_settings_frame(settings_frame: &SettingsFrame) -> Result<Vec<u8>, HTTP
     }
 
     let ack = SettingsFrame::new_ack(0);
-    let mut ret: Vec<u8> = ack.into();
+    let mut ret = ack.to_bytes();
 
     let my_settings = SettingsFrameBuilder::new()
         .enable_push(false)
@@ -232,7 +228,7 @@ fn handle_settings_frame(settings_frame: &SettingsFrame) -> Result<Vec<u8>, HTTP
 
     dbg!(&my_settings);
 
-    ret.extend(Vec::<u8>::from(my_settings));
+    my_settings.encode_to(&mut ret);
     Ok(ret)
 }
 
@@ -242,8 +238,7 @@ fn handle_ping_frame(
 ) -> std::vec::Vec<u8> {
     if !ping_frame.header.flags.ack {
         let ack = PingFrame::ack();
-        let bytes: Vec<u8> = ack.into();
-        let _ = tcp_stream.write(&bytes);
+        let _ = tcp_stream.write(&ack.to_bytes());
     }
 
     vec![]

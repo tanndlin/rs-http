@@ -1,4 +1,4 @@
-use crate::http2::frames::frame::FrameHeader;
+use crate::{encode_to::EncodeTo, http2::frames::frame::FrameHeader};
 
 #[derive(Debug)]
 pub struct WindowUpdateFrame {
@@ -22,12 +22,9 @@ impl TryFrom<&[u8]> for WindowUpdateFrame {
     }
 }
 
-impl From<WindowUpdateFrame> for Vec<u8> {
-    fn from(frame: WindowUpdateFrame) -> Self {
-        let mut ret = vec![];
-        let header_bytes: Vec<u8> = frame.header.into();
-        ret.extend_from_slice(&header_bytes);
-        ret.extend_from_slice(&(frame.window_size_increment & 0x7FFF_FFFF).to_be_bytes());
-        ret
+impl EncodeTo for WindowUpdateFrame {
+    fn encode_to(self, buf: &mut Vec<u8>) {
+        self.header.encode_to(buf);
+        buf.extend((self.window_size_increment & 0x7FFF_FFFF).to_be_bytes());
     }
 }

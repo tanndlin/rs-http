@@ -3,6 +3,8 @@ use crate::http2::{
     frames::frame::{FrameHeader, FrameType},
 };
 
+use crate::encode_to::EncodeTo;
+
 #[derive(Debug, Default)]
 pub struct SettingsFrameFlags {
     pub ack: bool,
@@ -134,36 +136,46 @@ impl TryFrom<&[u8]> for SettingsFrame {
     }
 }
 
-impl From<SettingsFrame> for Vec<u8> {
-    fn from(frame: SettingsFrame) -> Self {
-        let mut ret: Vec<u8> = frame.header.into();
+impl EncodeTo for SettingsFrame {
+    fn encode_to(self, buf: &mut Vec<u8>) {
+        let mut header = self.header;
+        header.length = 0;
 
-        if let Some(size) = frame.header_table_size {
-            ret.extend_from_slice(&(SettingsIdentifier::HeaderTableSize as u16).to_be_bytes());
-            ret.extend_from_slice(&size.to_be_bytes());
+        let mut bytes = vec![];
+
+        if let Some(size) = self.header_table_size {
+            header.length += 6;
+            bytes.extend((SettingsIdentifier::HeaderTableSize as u16).to_be_bytes());
+            bytes.extend(size.to_be_bytes());
         }
-        if let Some(enable) = frame.enable_push {
-            ret.extend_from_slice(&(SettingsIdentifier::EnablePush as u16).to_be_bytes());
-            ret.extend_from_slice(&u32::from(enable).to_be_bytes());
+        if let Some(enable) = self.enable_push {
+            header.length += 6;
+            bytes.extend((SettingsIdentifier::EnablePush as u16).to_be_bytes());
+            bytes.extend(u32::from(enable).to_be_bytes());
         }
-        if let Some(max) = frame.max_concurrent_streams {
-            ret.extend_from_slice(&(SettingsIdentifier::MaxConcurrentStreams as u16).to_be_bytes());
-            ret.extend_from_slice(&max.to_be_bytes());
+        if let Some(max) = self.max_concurrent_streams {
+            header.length += 6;
+            bytes.extend((SettingsIdentifier::MaxConcurrentStreams as u16).to_be_bytes());
+            bytes.extend(max.to_be_bytes());
         }
-        if let Some(size) = frame.initial_window_size {
-            ret.extend_from_slice(&(SettingsIdentifier::InitialWindowSize as u16).to_be_bytes());
-            ret.extend_from_slice(&size.to_be_bytes());
+        if let Some(size) = self.initial_window_size {
+            header.length += 6;
+            bytes.extend((SettingsIdentifier::InitialWindowSize as u16).to_be_bytes());
+            bytes.extend(size.to_be_bytes());
         }
-        if let Some(size) = frame.max_frame_size {
-            ret.extend_from_slice(&(SettingsIdentifier::MaxFrameSize as u16).to_be_bytes());
-            ret.extend_from_slice(&size.to_be_bytes());
+        if let Some(size) = self.max_frame_size {
+            header.length += 6;
+            bytes.extend((SettingsIdentifier::MaxFrameSize as u16).to_be_bytes());
+            bytes.extend(size.to_be_bytes());
         }
-        if let Some(size) = frame.max_header_list_size {
-            ret.extend_from_slice(&(SettingsIdentifier::MaxHeaderListSize as u16).to_be_bytes());
-            ret.extend_from_slice(&size.to_be_bytes());
+        if let Some(size) = self.max_header_list_size {
+            header.length += 6;
+            bytes.extend((SettingsIdentifier::MaxHeaderListSize as u16).to_be_bytes());
+            bytes.extend(size.to_be_bytes());
         }
 
-        ret
+        header.encode_to(buf);
+        buf.extend(bytes);
     }
 }
 

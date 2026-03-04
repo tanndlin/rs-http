@@ -8,8 +8,8 @@ pub struct HeaderBuilder {
 }
 
 impl HeaderBuilder {
-    pub fn new_fragment(&mut self, buf: &[u8]) {
-        self.data.extend_from_slice(buf);
+    pub fn new_fragment(&mut self, buf: Vec<u8>) {
+        self.data.extend(buf);
     }
 
     pub fn build(&mut self, decoder: &mut Decoder) -> Result<HashMap<String, String>, String> {

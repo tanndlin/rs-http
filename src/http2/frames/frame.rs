@@ -1,9 +1,13 @@
-use crate::http2::{
-    error::{HTTP2Error, HTTP2ErrorCode},
-    frames::{
-        data_frame::DataFrame, go_away_frame::GoAwayFrame, headers_frame::HeadersFrame,
-        ping_frame::PingFrame, priority_frame::PriorityFrame, push_promise_frame::PushPromiseFrame,
-        rst_frame::RstFrame, settings_frame::SettingsFrame, window_update_frame::WindowUpdateFrame,
+use crate::{
+    encode_to::EncodeTo,
+    http2::{
+        error::{HTTP2Error, HTTP2ErrorCode},
+        frames::{
+            data_frame::DataFrame, go_away_frame::GoAwayFrame, headers_frame::HeadersFrame,
+            ping_frame::PingFrame, priority_frame::PriorityFrame,
+            push_promise_frame::PushPromiseFrame, rst_frame::RstFrame,
+            settings_frame::SettingsFrame, window_update_frame::WindowUpdateFrame,
+        },
     },
 };
 
@@ -129,22 +133,19 @@ where
     pub stream_id: u32, // 31 bits (R infront)
 }
 
-impl<T> From<FrameHeader<T>> for Vec<u8>
+impl<T> EncodeTo for FrameHeader<T>
 where
     T: From<u8>,
     T: Into<u8>,
 {
     #[allow(clippy::cast_possible_truncation)]
-    fn from(val: FrameHeader<T>) -> Self {
-        let mut buf = vec![
-            (val.length >> 16) as u8,
-            (val.length >> 8) as u8,
-            val.length as u8,
-            val.frame_type as u8,
-            val.flags.into(),
-        ];
-        buf.extend_from_slice(&val.stream_id.to_be_bytes());
-        buf
+    fn encode_to(self, buf: &mut Vec<u8>) {
+        buf.push((self.length >> 16) as u8);
+        buf.push((self.length >> 8) as u8);
+        buf.push(self.length as u8);
+        buf.push(self.frame_type as u8);
+        buf.push(self.flags.into());
+        buf.extend(self.stream_id.to_be_bytes());
     }
 }
 

@@ -1,6 +1,7 @@
 use std::io::Read;
 
 use crate::{
+    encode_to::EncodeTo,
     http2::{
         connection_state::ConnectionState,
         frames::frame::{FrameHeader, FrameType},
@@ -145,31 +146,28 @@ impl From<(&Response, &mut ConnectionState<'_>)> for HeadersFrame {
     }
 }
 
-impl From<HeadersFrame> for Vec<u8> {
-    fn from(headers_frame: HeadersFrame) -> Self {
-        let mut payload = vec![];
+impl EncodeTo for HeadersFrame {
+    fn encode_to(self, buf: &mut Vec<u8>) {
+        let priority = self.header.flags.priority;
+        let padded = self.header.flags.padded;
+        self.header.encode_to(buf);
 
-        if headers_frame.header.flags.padded {
-            payload.push(headers_frame.pad_length);
+        if padded {
+            buf.push(self.pad_length);
         }
 
-        if headers_frame.header.flags.priority {
-            payload.extend_from_slice(
-                &(headers_frame.stream_dependency.unwrap()
-                    | (u32::from(headers_frame.exclusive.unwrap()) << 31))
+        if priority {
+            buf.extend(
+                (self.stream_dependency.unwrap() | (u32::from(self.exclusive.unwrap()) << 31))
                     .to_be_bytes(),
             );
-            payload.push(headers_frame.weight.unwrap());
+            buf.push(self.weight.unwrap());
         }
 
-        payload.extend(headers_frame.header_block_fragment);
+        buf.extend(self.header_block_fragment);
 
-        if headers_frame.pad_length > 0 {
-            payload.extend(vec![0, headers_frame.pad_length]);
+        if self.pad_length > 0 {
+            buf.extend(vec![0; self.pad_length as usize]);
         }
-
-        let mut header_bytes: Vec<u8> = headers_frame.header.into();
-        header_bytes.extend(payload);
-        header_bytes
     }
 }
