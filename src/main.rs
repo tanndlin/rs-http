@@ -126,7 +126,8 @@ fn handle_client(mut tcp_stream: SslStream<TcpStream>) {
         let result = match frame::Frame::try_from(&buffer.read_n_bytes(full_frame_length)[..]) {
             Err(e) => {
                 dbg!(&e);
-                break;
+                println!("Error parsing frame: {e:?}");
+                Ok(vec![])
             }
             Ok(f) => {
                 // dbg!(&f);

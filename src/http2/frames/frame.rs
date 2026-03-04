@@ -26,18 +26,21 @@ pub enum FrameType {
     WindowUpdate = 8,
 }
 
-impl From<u8> for FrameType {
-    fn from(value: u8) -> Self {
+impl TryFrom<u8> for FrameType {
+    type Error = String;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            1 => FrameType::Headers,
-            2 => FrameType::Priority,
-            3 => FrameType::RstStream,
-            4 => FrameType::Settings,
-            5 => FrameType::PushPromise,
-            6 => FrameType::Ping,
-            7 => FrameType::GoAway,
-            8 => FrameType::WindowUpdate,
-            _ => FrameType::Data,
+            0 => Ok(Self::Data),
+            1 => Ok(Self::Headers),
+            2 => Ok(Self::Priority),
+            3 => Ok(Self::RstStream),
+            4 => Ok(Self::Settings),
+            5 => Ok(Self::PushPromise),
+            6 => Ok(Self::Ping),
+            7 => Ok(Self::GoAway),
+            8 => Ok(Self::WindowUpdate),
+            _ => Err(format!("Invalid frame type: {value}")),
         }
     }
 }
@@ -64,7 +67,8 @@ impl TryFrom<&[u8]> for Frame {
             "Tried to parse frame but buffer was less than 9 bytes for frame header"
         );
 
-        let frame_type = FrameType::from(buf[3]);
+        let frame_type = FrameType::try_from(buf[3])
+            .map_err(|_| HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError))?;
         Ok(match frame_type {
             FrameType::Data => Frame::Data(
                 DataFrame::try_from(buf)
@@ -161,7 +165,7 @@ where
         }
 
         let length = (u32::from(buf[0]) << 16) | (u32::from(buf[1]) << 8) | u32::from(buf[2]);
-        let frame_type = FrameType::from(buf[3]);
+        let frame_type = FrameType::try_from(buf[3]).map_err(|_| "Invalid frame type")?;
         let flag_bits = buf[4];
         let flags = T::from(flag_bits);
         let stream_identifier = u32::from_be_bytes([buf[5], buf[6], buf[7], buf[8]]) & !(0b1 << 31);
