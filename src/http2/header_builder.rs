@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use hpack::Decoder;
 
+#[derive(Debug)]
 pub struct HeaderBuilder {
     data: Vec<u8>,
 }

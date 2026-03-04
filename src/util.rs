@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, fs::read, str::FromStr};
 
 use crate::{
     http2::{
@@ -7,6 +7,8 @@ use crate::{
         gc_buffer::GCBuffer,
     },
     request::{Method, Request},
+    response::{Response, ResponseBuilder, StatusCode},
+    types::ContentType,
 };
 
 pub fn u32_from_3_bytes(buf: &[u8; 3]) -> u32 {
@@ -44,4 +46,65 @@ fn decode_headers(
         path,
         stream_id,
     })
+}
+
+pub fn handle_request(request: &Request) -> Result<Response, String> {
+    println!("Got request");
+    dbg!(&request);
+
+    match request.method {
+        Method::GET => handle_get(request),
+        Method::HEAD => handle_head(request),
+        _ => Ok(Response::method_not_allowed()),
+    }
+}
+
+fn handle_get(request: &Request) -> Result<Response, String> {
+    let path = if &request.path == "/" {
+        "/index.html"
+    } else {
+        &request.path
+    };
+
+    dbg!(&path);
+
+    let file_extension = path.split(".").last().ok_or("No file extension found")?;
+    let content_type = ContentType::from_extension(file_extension);
+    if content_type == ContentType::Unknown {
+        return Ok(Response::bad_request());
+    }
+
+    let file_contents = read(format!("public{path}")).map_err(|_| "Unable to read file")?;
+    Ok(ResponseBuilder::new()
+        .status_code(StatusCode::Ok)
+        .header("Content-Type".to_string(), content_type.into())
+        .stream_id(request.stream_id)
+        .body(file_contents)
+        .build())
+}
+
+fn handle_head(request: &Request) -> Result<Response, String> {
+    let path = if &request.path == "/" {
+        "index.html"
+    } else {
+        &request.path
+    };
+
+    let file_extension = path.split(".").last().ok_or("No file extension found")?;
+    let content_type = ContentType::from_extension(file_extension);
+    if content_type == ContentType::Unknown {
+        return Ok(Response::bad_request());
+    }
+
+    let file_contents = read(format!("public{path}")).map_err(|_| "Unable to read file")?;
+    Ok(ResponseBuilder::new()
+        .status_code(StatusCode::Ok)
+        .header("Content-Type".to_string(), content_type.into())
+        .header(
+            "Content-Length".to_string(),
+            file_contents.len().to_string(),
+        )
+        .stream_id(request.stream_id)
+        .body(file_contents)
+        .build())
 }

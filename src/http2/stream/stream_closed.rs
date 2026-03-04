@@ -4,6 +4,7 @@ use crate::http2::{
     stream::http_stream::HTTP2Stream,
 };
 
+#[derive(Debug)]
 pub struct HTTP2StreamClosed {
     pub id: u32,
     end_stream_received: bool,

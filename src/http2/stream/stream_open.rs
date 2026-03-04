@@ -1,7 +1,6 @@
-use std::{path, str::FromStr};
+use std::str::FromStr;
 
 use crate::{
-    handle_request,
     http2::{
         connection_state::ConnectionState,
         error::{HTTP2Error, HTTP2ErrorCode},
@@ -13,8 +12,10 @@ use crate::{
         },
     },
     request::{Method, Request},
+    util::handle_request,
 };
 
+#[derive(Debug)]
 pub struct HTTP2StreamOpen {
     pub id: u32,
     header_builder: HeaderBuilder,
@@ -28,7 +29,7 @@ impl HTTP2StreamOpen {
         }
     }
     pub fn handle_frame(
-        mut self,
+        self,
         frame: Frame,
         state: &mut ConnectionState,
     ) -> Result<(HTTP2Stream, Vec<u8>), (HTTP2Stream, HTTP2Error)> {

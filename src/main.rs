@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    fs::read,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
     sync::Arc,
@@ -10,7 +9,7 @@ use std::{
 use crate::{
     http2::{
         connection_state::ConnectionState,
-        error::HTTP2Error,
+        error::{HTTP2Error, HTTP2ErrorCode},
         frames::{
             frame::{self, Frame, FrameHeader, FrameType},
             go_away_frame::GoAwayFrame,
@@ -21,9 +20,6 @@ use crate::{
         gc_buffer::GCBuffer,
         stream::http_stream::HTTP2Stream,
     },
-    request::{Method, Request},
-    response::{Response, ResponseBuilder},
-    types::ContentType,
     util::u32_from_3_bytes,
 };
 
@@ -99,7 +95,6 @@ fn handle_client(mut tcp_stream: SslStream<TcpStream>) {
 
     let mut buffer = GCBuffer::new();
     loop {
-        dbg!("Reading");
         match buffer.read_from_stream(&mut tcp_stream) {
             Ok(0) => {
                 dbg!("Client closed connection");
@@ -140,10 +135,21 @@ fn handle_client(mut tcp_stream: SslStream<TcpStream>) {
                     Frame::Ping(ping_frame) => handle_ping_frame(&mut tcp_stream, ping_frame),
                     _ => {
                         // TODO: See if there is a way to do state management without push and pop
-                        let stream = streams
-                            .remove(&stream_id)
-                            .or_else(|| Some(HTTP2Stream::new(stream_id)))
-                            .unwrap();
+                        let stream = match streams.remove(&stream_id) {
+                            Some(s) => s,
+                            None => {
+                                if stream_id.is_multiple_of(2)
+                                    || stream_id < streams.keys().copied().max().unwrap_or(0)
+                                {
+                                    let go_away = GoAwayFrame::from(HTTP2ErrorCode::ProtocolError);
+                                    let bytes: Vec<u8> = go_away.into();
+                                    let _ = tcp_stream.write(&bytes);
+                                    return;
+                                } else {
+                                    HTTP2Stream::new(stream_id)
+                                }
+                            }
+                        };
 
                         match stream.handle_frame(f, &mut state) {
                             Ok((stream_state, bytes)) => {
@@ -218,65 +224,4 @@ fn handle_ping_frame(
         let _ = tcp_stream.write(&bytes);
     }
     Ok(vec![])
-}
-
-fn handle_request(request: &Request) -> Result<Response, String> {
-    println!("Got request");
-    dbg!(&request);
-
-    match request.method {
-        Method::GET => handle_get(request),
-        Method::HEAD => handle_head(request),
-        _ => Ok(Response::method_not_allowed()),
-    }
-}
-
-fn handle_get(request: &Request) -> Result<Response, String> {
-    let path = if &request.path == "/" {
-        "/index.html"
-    } else {
-        &request.path
-    };
-
-    dbg!(&path);
-
-    let file_extension = path.split(".").last().ok_or("No file extension found")?;
-    let content_type = ContentType::from_extension(file_extension);
-    if content_type == ContentType::Unknown {
-        return Ok(Response::bad_request());
-    }
-
-    let file_contents = read(format!("public{path}")).map_err(|_| "Unable to read file")?;
-    Ok(ResponseBuilder::new()
-        .status_code(response::StatusCode::Ok)
-        .header("Content-Type".to_string(), content_type.into())
-        .stream_id(request.stream_id)
-        .body(file_contents)
-        .build())
-}
-
-fn handle_head(request: &Request) -> Result<Response, String> {
-    let path = if &request.path == "/" {
-        "index.html"
-    } else {
-        &request.path
-    };
-
-    let file_extension = path.split(".").last().ok_or("No file extension found")?;
-    let content_type = ContentType::from_extension(file_extension);
-    if content_type == ContentType::Unknown {
-        return Ok(Response::bad_request());
-    }
-
-    let file_contents = read(format!("public{path}")).map_err(|_| "Unable to read file")?;
-    Ok(ResponseBuilder::new()
-        .status_code(response::StatusCode::Ok)
-        .header("Content-Type".to_string(), content_type.into())
-        .header(
-            "Content-Length".to_string(),
-            file_contents.len().to_string(),
-        )
-        .stream_id(request.stream_id)
-        .body(file_contents)
-        .build())
 }

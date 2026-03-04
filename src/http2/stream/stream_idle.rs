@@ -7,6 +7,7 @@ use crate::http2::{
     },
 };
 
+#[derive(Debug)]
 pub struct HTTP2StreamIdle {
     pub id: u32,
 }

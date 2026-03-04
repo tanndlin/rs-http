@@ -1,8 +1,10 @@
 use crate::http2::{error::HTTP2Error, frames::frame::Frame, stream::http_stream::HTTP2Stream};
 
+#[derive(Debug)]
 pub struct HTTP2StreamHalfClosedLocal {
     pub id: u32,
 }
+
 impl HTTP2StreamHalfClosedLocal {
     pub fn handle_frame(
         &self,

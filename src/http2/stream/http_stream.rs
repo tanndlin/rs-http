@@ -8,6 +8,7 @@ use crate::http2::{
     },
 };
 
+#[derive(Debug)]
 pub enum HTTP2Stream {
     Idle(HTTP2StreamIdle),
     Open(HTTP2StreamOpen),
