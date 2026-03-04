@@ -13,7 +13,7 @@ pub struct HTTP2StreamClosed {
 impl HTTP2StreamClosed {
     pub fn handle_frame(
         self,
-        frame: Frame,
+        frame: &Frame,
     ) -> Result<(HTTP2Stream, Vec<u8>), (HTTP2Stream, HTTP2Error)> {
         match frame {
             Frame::Priority(_) => todo!(),

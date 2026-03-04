@@ -22,7 +22,6 @@ pub enum FrameType {
 impl From<u8> for FrameType {
     fn from(value: u8) -> Self {
         match value {
-            0 => FrameType::Data,
             1 => FrameType::Headers,
             2 => FrameType::Priority,
             3 => FrameType::RstStream,
@@ -31,7 +30,7 @@ impl From<u8> for FrameType {
             6 => FrameType::Ping,
             7 => FrameType::GoAway,
             8 => FrameType::WindowUpdate,
-            _ => FrameType::Data, // TODO: Verify if I should panic or discard
+            _ => FrameType::Data,
         }
     }
 }
@@ -107,6 +106,7 @@ where
     T: From<u8>,
     T: Into<u8>,
 {
+    #[allow(clippy::cast_possible_truncation)]
     fn from(val: FrameHeader<T>) -> Self {
         let mut buf = vec![
             (val.length >> 16) as u8,
@@ -131,7 +131,7 @@ where
             return Err("Frame header must be at least 9 bytes".to_string());
         }
 
-        let length = ((buf[0] as u32) << 16) | ((buf[1] as u32) << 8) | (buf[2] as u32);
+        let length = (u32::from(buf[0]) << 16) | (u32::from(buf[1]) << 8) | u32::from(buf[2]);
         let frame_type = FrameType::from(buf[3]);
         let flag_bits = buf[4];
         let flags = T::from(flag_bits);

@@ -55,7 +55,7 @@ impl TryFrom<&[u8]> for DataFrame {
             0
         };
 
-        let data_length = (header.length - pad_length as u32) as usize;
+        let data_length = (header.length - u32::from(pad_length)) as usize;
         let mut data = vec![0u8; data_length];
         buf.read_exact(&mut data)
             .map_err(|_| format!("DataFrame buffer had less than {data_length} bytes"))?;
@@ -72,6 +72,7 @@ impl From<&Response> for DataFrame {
     fn from(res: &Response) -> Self {
         Self {
             header: FrameHeader {
+                #[allow(clippy::cast_possible_truncation)]
                 length: res.body.len() as u32,
                 frame_type: FrameType::Data,
                 flags: DataFrameFlags {
@@ -90,13 +91,13 @@ impl From<DataFrame> for Vec<u8> {
     fn from(data_frame: DataFrame) -> Self {
         let mut payload = vec![];
         if data_frame.header.flags.padding {
-            payload.push(data_frame.pad_length)
+            payload.push(data_frame.pad_length);
         }
 
         payload.extend(data_frame.data);
 
         if data_frame.pad_length > 0 {
-            payload.extend(vec![0; data_frame.pad_length as usize])
+            payload.extend(vec![0; data_frame.pad_length as usize]);
         }
 
         let mut header_bytes: Vec<u8> = data_frame.header.into();

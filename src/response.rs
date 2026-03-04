@@ -74,7 +74,7 @@ impl Response {
         let mut buffer = vec![];
         buffer.extend_from_slice(format!("HTTP/1.1 {}\r\n", self.status_code).as_bytes());
         for (name, value) in &self.headers {
-            buffer.extend_from_slice(format!("{}: {}\r\n", name, value).as_bytes());
+            buffer.extend_from_slice(format!("{name}: {value}\r\n").as_bytes());
         }
 
         buffer.extend_from_slice(b"\r\n");
@@ -135,7 +135,7 @@ impl ResponseBuilder {
         add_if_missing!("Content-Length", headers, || self
             .body
             .as_ref()
-            .map_or(0, |b| b.len())
+            .map_or(0, Vec::len)
             .to_string());
 
         Response {

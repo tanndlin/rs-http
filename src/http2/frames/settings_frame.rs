@@ -15,11 +15,7 @@ impl From<u8> for SettingsFrameFlags {
 
 impl From<SettingsFrameFlags> for u8 {
     fn from(flags: SettingsFrameFlags) -> Self {
-        let mut bits = 0u8;
-
-        bits |= flags.ack as u8; // bit 0
-
-        bits
+        u8::from(flags.ack)
     }
 }
 
@@ -110,7 +106,7 @@ impl TryFrom<&[u8]> for SettingsFrame {
                 SettingsIdentifier::HeaderTableSize => ret.header_table_size = Some(value),
                 SettingsIdentifier::EnablePush => ret.enable_push = Some(value > 0),
                 SettingsIdentifier::MaxConcurrentStreams => {
-                    ret.max_concurrent_streams = Some(value)
+                    ret.max_concurrent_streams = Some(value);
                 }
                 SettingsIdentifier::InitialWindowSize => ret.initial_window_size = Some(value),
                 SettingsIdentifier::MaxFrameSize => ret.max_frame_size = Some(value),
@@ -134,7 +130,7 @@ impl From<SettingsFrame> for Vec<u8> {
         }
         if let Some(enable) = frame.enable_push {
             ret.extend_from_slice(&(SettingsIdentifier::EnablePush as u16).to_be_bytes());
-            ret.extend_from_slice(&(enable as u32).to_be_bytes());
+            ret.extend_from_slice(&u32::from(enable).to_be_bytes());
         }
         if let Some(max) = frame.max_concurrent_streams {
             ret.extend_from_slice(&(SettingsIdentifier::MaxConcurrentStreams as u16).to_be_bytes());

@@ -7,7 +7,7 @@ pub fn cache_all_files(base_path: &str) -> Result<HashMap<String, Vec<u8>>, Stri
     dbg!(&base_path);
     let mut ret = HashMap::new();
     for path in get_all_paths(base_path)? {
-        let path = path.path().to_str().unwrap().to_string().replace("\\", "/");
+        let path = path.path().to_str().unwrap().to_string().replace('\\', "/");
         ret.insert(
             path.trim_start_matches(base_path).to_string(),
             read(path).unwrap(),

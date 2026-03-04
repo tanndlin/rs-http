@@ -1,17 +1,8 @@
 use crate::http2::frames::frame::FrameHeader;
 
 #[derive(Debug)]
-pub struct PriorityFrameFlags {}
-
-impl From<u8> for PriorityFrameFlags {
-    fn from(value: u8) -> Self {
-        Self {}
-    }
-}
-
-#[derive(Debug)]
 pub struct PriorityFrame {
-    pub header: FrameHeader<PriorityFrameFlags>,
+    pub header: FrameHeader<u8>,
     pub exclusive: bool,        // 1 bit
     pub stream_dependency: u32, // 31 bits
     pub weight: u8,             // 8 bits

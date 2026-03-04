@@ -58,6 +58,6 @@ impl Display for ContentType {
             ContentType::Image(ImageType::Icon) => "image/x-icon",
             ContentType::Unknown => "application/octet-stream",
         };
-        write!(f, "{}", content_type_str)
+        write!(f, "{content_type_str}")
     }
 }

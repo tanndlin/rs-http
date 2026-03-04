@@ -16,7 +16,7 @@ impl HeaderBuilder {
         dbg!("Decoding");
         let decoded_headers = decoder
             .decode(&self.data)
-            .map_err(|e| format!("Error decoding compressed headers: {:?}", e))?;
+            .map_err(|e| format!("Error decoding compressed headers: {e:?}"))?;
         self.data.clear();
         // dbg!(&decoded_headers);
 

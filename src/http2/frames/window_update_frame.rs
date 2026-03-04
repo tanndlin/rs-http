@@ -13,7 +13,7 @@ impl TryFrom<&[u8]> for WindowUpdateFrame {
         let header = FrameHeader::<u8>::try_from(buf)?;
         let window_size_increment =
             u32::from_be_bytes(buf[9..13].try_into().map_err(|_| "Invalid data length")?)
-                & 0x7FFFFFFF; // mask out the most significant bit
+                & 0x7FFF_FFFF; // mask out the most significant bit
 
         Ok(Self {
             header,
@@ -27,7 +27,7 @@ impl From<WindowUpdateFrame> for Vec<u8> {
         let mut ret = vec![];
         let header_bytes: Vec<u8> = frame.header.into();
         ret.extend_from_slice(&header_bytes);
-        ret.extend_from_slice(&(frame.window_size_increment & 0x7FFFFFFF).to_be_bytes());
+        ret.extend_from_slice(&(frame.window_size_increment & 0x7FFF_FFFF).to_be_bytes());
         ret
     }
 }

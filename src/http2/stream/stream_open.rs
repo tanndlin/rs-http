@@ -19,7 +19,7 @@ use crate::{
 pub struct HTTP2StreamOpen {
     pub id: u32,
     header_builder: HeaderBuilder,
-    pending_request: Option<Request>,
+    pending_request: Option<Box<Request>>,
 }
 
 impl HTTP2StreamOpen {
@@ -36,8 +36,8 @@ impl HTTP2StreamOpen {
         state: &mut ConnectionState,
     ) -> Result<(HTTP2Stream, Vec<u8>), (HTTP2Stream, HTTP2Error)> {
         match frame {
-            Frame::Data(data_frame) => self.handle_data_frame(state, data_frame),
-            Frame::Headers(headers_frame) => self.handle_headers_frame(state, headers_frame),
+            Frame::Data(data_frame) => self.handle_data_frame(state, &data_frame),
+            Frame::Headers(headers_frame) => self.handle_headers_frame(state, &headers_frame),
             _ => todo!(),
         }
     }
@@ -45,31 +45,24 @@ impl HTTP2StreamOpen {
     fn handle_data_frame(
         mut self,
         state: &mut ConnectionState,
-        data_frame: DataFrame,
+        data_frame: &DataFrame,
     ) -> Result<(HTTP2Stream, Vec<u8>), (HTTP2Stream, HTTP2Error)> {
         println!("Handling data frame for stream {}", self.id);
-        let mut req = match self.pending_request.take() {
-            Some(req) => req,
-            None => {
-                return Err((
-                    self.close(false),
-                    HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
-                ));
-            }
+        let Some(mut req) = self.pending_request.take() else {
+            return Err((
+                self.close(false),
+                HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
+            ));
         };
 
         req.body.extend_from_slice(&data_frame.data);
         if data_frame.header.flags.end_stream {
-            let res = match handle_request(&req) {
-                Ok(res) => res,
-                Err(_) => {
-                    return Err((
-                        self.close(true),
-                        HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
-                    ));
-                }
+            let Some(res) = handle_request(&req).ok() else {
+                return Err((
+                    self.close(true),
+                    HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
+                ));
             };
-
             dbg!(&res);
 
             let mut bytes = vec![];
@@ -90,7 +83,7 @@ impl HTTP2StreamOpen {
     fn handle_headers_frame(
         mut self,
         state: &mut ConnectionState,
-        headers_frame: HeadersFrame,
+        headers_frame: &HeadersFrame,
     ) -> Result<(HTTP2Stream, Vec<u8>), (HTTP2Stream, HTTP2Error)> {
         println!("Handling headers frame for stream {}", self.id);
         self.header_builder
@@ -100,35 +93,25 @@ impl HTTP2StreamOpen {
         }
         let end_stream = headers_frame.header.flags.end_stream;
 
-        let headers = match self.header_builder.build(&mut state.decoder) {
-            Ok(h) => h,
-            Err(_) => {
-                return Err((
-                    self.close(end_stream),
-                    HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
-                ));
-            }
+        let Ok(headers) = self.header_builder.build(&mut state.decoder) else {
+            return Err((
+                self.close(end_stream),
+                HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
+            ));
         };
 
-        // dbg!(&headers);
-        let method = match headers.get(":method") {
-            Some(method) => method,
-            None => {
-                return Err((
-                    self.close(end_stream),
-                    HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
-                ));
-            }
+        let Some(method) = headers.get(":method") else {
+            return Err((
+                self.close(end_stream),
+                HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
+            ));
         };
 
-        let method = match Method::from_str(method) {
-            Ok(m) => m,
-            Err(_) => {
-                return Err((
-                    self.close(end_stream),
-                    HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
-                ));
-            }
+        let Ok(method) = Method::from_str(method) else {
+            return Err((
+                self.close(end_stream),
+                HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
+            ));
         };
 
         let path = match headers.get(":path") {
@@ -150,18 +133,15 @@ impl HTTP2StreamOpen {
         };
 
         if !end_stream {
-            self.pending_request = Some(req);
+            self.pending_request = Some(Box::new(req));
             return Ok((HTTP2Stream::Open(self), vec![]));
         }
 
-        let res = match handle_request(&req) {
-            Ok(res) => res,
-            Err(_) => {
-                return Err((
-                    self.close(end_stream),
-                    HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
-                ));
-            }
+        let Ok(res) = handle_request(&req) else {
+            return Err((
+                self.close(end_stream),
+                HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
+            ));
         };
 
         let mut bytes = vec![];

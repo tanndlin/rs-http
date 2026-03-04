@@ -8,7 +8,7 @@ pub struct HTTP2StreamHalfClosedLocal {
 impl HTTP2StreamHalfClosedLocal {
     pub fn handle_frame(
         &self,
-        frame: Frame,
+        frame: &Frame,
     ) -> Result<(HTTP2Stream, Vec<u8>), (HTTP2Stream, HTTP2Error)> {
         todo!()
     }

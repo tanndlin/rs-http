@@ -1,3 +1,5 @@
+// #![allow(clippy::unused)]
+
 use std::{
     collections::HashMap,
     io::{Read, Write},
@@ -11,11 +13,11 @@ use crate::{
         connection_state::ConnectionState,
         error::{HTTP2Error, HTTP2ErrorCode},
         frames::{
-            frame::{self, Frame, FrameHeader, FrameType},
+            frame::{self, Frame},
             go_away_frame::GoAwayFrame,
             ping_frame::PingFrame,
             rst_frame::RstFrame,
-            settings_frame::{SettingsFrame, SettingsFrameBuilder, SettingsFrameFlags},
+            settings_frame::{SettingsFrame, SettingsFrameBuilder},
         },
         gc_buffer::GCBuffer,
         stream::http_stream::HTTP2Stream,
@@ -36,9 +38,7 @@ mod util;
 fn main() {
     // Log args
     let args: Vec<String> = std::env::args().collect();
-    if args.len() != 2 {
-        panic!("Expected 1 argument (serve folder)")
-    }
+    assert!(args.len() == 2, "Expected 1 argument (serve folder)");
 
     // Build TLS acceptor
     let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
@@ -97,7 +97,7 @@ fn handle_client(mut tcp_stream: SslStream<TcpStream>) {
     loop {
         // Check if there is a frame in the buffer, otherwise read and continue
         let full_frame_length = match buffer.peek::<3>() {
-            Some(len_buf) => (u32_from_3_bytes(len_buf) + 9) as usize,
+            Some(len_buf) => (u32_from_3_bytes(*len_buf) + 9) as usize,
             None => match buffer.read_from_stream(&mut tcp_stream) {
                 Ok(0) => {
                     println!("Client closed connection");
@@ -138,24 +138,23 @@ fn handle_client(mut tcp_stream: SslStream<TcpStream>) {
                 let stream_id = f.get_stream_id();
 
                 match f {
-                    Frame::Settings(settings_frame) => handle_settings_frame(settings_frame),
-                    Frame::Ping(ping_frame) => handle_ping_frame(&mut tcp_stream, ping_frame),
+                    Frame::Settings(settings_frame) => handle_settings_frame(&settings_frame),
+                    Frame::Ping(ping_frame) => Ok(handle_ping_frame(&mut tcp_stream, &ping_frame)),
                     _ => {
                         // TODO: See if there is a way to do state management without push and pop
-                        let stream = match streams.remove(&stream_id) {
-                            Some(s) => s,
-                            None => {
-                                if stream_id.is_multiple_of(2)
-                                    || stream_id < streams.keys().copied().max().unwrap_or(0)
-                                {
-                                    let go_away = GoAwayFrame::from(HTTP2ErrorCode::ProtocolError);
-                                    let bytes: Vec<u8> = go_away.into();
-                                    let _ = tcp_stream.write(&bytes);
-                                    return;
-                                } else {
-                                    HTTP2Stream::new(stream_id)
-                                }
+                        let stream = if let Some(s) = streams.remove(&stream_id) {
+                            s
+                        } else {
+                            if stream_id.is_multiple_of(2)
+                                || stream_id < streams.keys().copied().max().unwrap_or(0)
+                            {
+                                let go_away = GoAwayFrame::from(HTTP2ErrorCode::ProtocolError);
+                                let bytes: Vec<u8> = go_away.into();
+                                let _ = tcp_stream.write(&bytes);
+                                return;
                             }
+
+                            HTTP2Stream::new(stream_id)
                         };
 
                         match stream.handle_frame(f, &mut state) {
@@ -197,7 +196,7 @@ fn handle_client(mut tcp_stream: SslStream<TcpStream>) {
     println!("Outside read loop");
 }
 
-fn handle_settings_frame(settings_frame: SettingsFrame) -> Result<Vec<u8>, HTTP2Error> {
+fn handle_settings_frame(settings_frame: &SettingsFrame) -> Result<Vec<u8>, HTTP2Error> {
     if settings_frame.header.stream_id != 0 {
         return Err(HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError));
     }
@@ -227,12 +226,13 @@ fn handle_settings_frame(settings_frame: SettingsFrame) -> Result<Vec<u8>, HTTP2
 
 fn handle_ping_frame(
     tcp_stream: &mut SslStream<TcpStream>,
-    ping_frame: PingFrame,
-) -> Result<Vec<u8>, HTTP2Error> {
+    ping_frame: &PingFrame,
+) -> std::vec::Vec<u8> {
     if !ping_frame.header.flags.ack {
         let ack = PingFrame::ack();
         let bytes: Vec<u8> = ack.into();
         let _ = tcp_stream.write(&bytes);
     }
-    Ok(vec![])
+
+    vec![]
 }

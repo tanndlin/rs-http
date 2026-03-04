@@ -1,6 +1,6 @@
 use crate::http2::{
     connection_state::ConnectionState,
-    error::{HTTP2Error, HTTP2ErrorCode, StreamError},
+    error::{HTTP2Error, HTTP2ErrorCode},
     frames::{frame::Frame, headers_frame::HeadersFrame},
     stream::{
         http_stream::HTTP2Stream, stream_closed::HTTP2StreamClosed, stream_open::HTTP2StreamOpen,

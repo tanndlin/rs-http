@@ -32,8 +32,8 @@ impl HTTP2Stream {
             HTTP2Stream::ReservedLocal => todo!(),
             HTTP2Stream::ReservedRemote => todo!(),
             HTTP2Stream::HalfClosedRemote(stream) => stream.handle_frame(frame),
-            HTTP2Stream::HalfClosedLocal(stream) => stream.handle_frame(frame),
-            HTTP2Stream::Closed(stream) => stream.handle_frame(frame),
+            HTTP2Stream::HalfClosedLocal(stream) => stream.handle_frame(&frame),
+            HTTP2Stream::Closed(stream) => stream.handle_frame(&frame),
         }
     }
 }

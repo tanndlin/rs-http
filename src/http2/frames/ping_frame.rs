@@ -15,7 +15,7 @@ impl From<u8> for PingFrameFlags {
 
 impl From<PingFrameFlags> for u8 {
     fn from(flags: PingFrameFlags) -> Self {
-        if flags.ack { 1 } else { 0 }
+        u8::from(flags.ack)
     }
 }
 

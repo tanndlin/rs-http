@@ -9,6 +9,7 @@ use crate::{
 };
 
 #[derive(Debug)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct HeadersFrameFlags {
     pub end_stream: bool,  // bit 0
     pub end_headers: bool, // bit 2
@@ -30,10 +31,10 @@ impl From<u8> for HeadersFrameFlags {
 impl From<HeadersFrameFlags> for u8 {
     fn from(flags: HeadersFrameFlags) -> Self {
         let mut bits = 0u8;
-        bits |= flags.end_stream as u8;
-        bits |= (flags.end_headers as u8) << 2;
-        bits |= (flags.padded as u8) << 3;
-        bits |= (flags.priority as u8) << 5;
+        bits |= u8::from(flags.end_stream);
+        bits |= u8::from(flags.end_headers) << 2;
+        bits |= u8::from(flags.padded) << 3;
+        bits |= u8::from(flags.priority) << 5;
         bits
     }
 }
@@ -102,7 +103,7 @@ impl TryFrom<&[u8]> for HeadersFrame {
     }
 }
 
-impl<'a> From<(&Response, &mut ConnectionState<'a>)> for HeadersFrame {
+impl From<(&Response, &mut ConnectionState<'_>)> for HeadersFrame {
     fn from(pair: (&Response, &mut ConnectionState)) -> Self {
         let (res, state) = pair;
         let mut bytes: Vec<(Vec<u8>, Vec<u8>)> = vec![];
@@ -121,6 +122,7 @@ impl<'a> From<(&Response, &mut ConnectionState<'a>)> for HeadersFrame {
             .encoder
             .encode(bytes.iter().map(|(k, v)| (k.as_slice(), v.as_slice())));
         let header = FrameHeader::<HeadersFrameFlags> {
+            #[allow(clippy::cast_possible_truncation)]
             length: encoded.len() as u32,
             frame_type: FrameType::Headers,
             flags: HeadersFrameFlags {
@@ -154,7 +156,7 @@ impl From<HeadersFrame> for Vec<u8> {
         if headers_frame.header.flags.priority {
             payload.extend_from_slice(
                 &(headers_frame.stream_dependency.unwrap()
-                    | ((headers_frame.exclusive.unwrap() as u32) << 31))
+                    | (u32::from(headers_frame.exclusive.unwrap()) << 31))
                     .to_be_bytes(),
             );
             payload.push(headers_frame.weight.unwrap());
