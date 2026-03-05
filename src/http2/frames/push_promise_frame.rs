@@ -45,7 +45,7 @@ impl TryFrom<&[u8]> for PushPromiseFrame {
         let mut buf = buf;
 
         let header = FrameHeader::<PushPromiseFrameFlags>::try_from(buf)?;
-        let mut frag_length = header.length as usize;
+        let mut frag_length = header.length as usize - 4; // 4 bytes for stream_id
         buf = &buf[9..];
         let pad_length = if header.flags.padded {
             let val = buf[0];
