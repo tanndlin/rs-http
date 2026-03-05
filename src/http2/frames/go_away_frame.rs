@@ -20,10 +20,11 @@ impl TryFrom<&[u8]> for GoAwayFrame {
     fn try_from(buf: &[u8]) -> Result<Self, Self::Error> {
         let header = FrameHeader::try_from(buf)?;
         let n = u32::from_be_bytes(buf[9..13].try_into().unwrap());
-        let last_stream_id = n & !(1 << 31);
+        let last_stream_id = n & 0x7FFF_FFFF;
         let error_code = u32::from_be_bytes(buf[13..17].try_into().unwrap());
 
-        let data = buf[17..17 + header.length as usize].to_vec();
+        let data_len = header.length as usize - 8;
+        let data = buf[17..17 + data_len].to_vec();
 
         Ok(Self {
             header,
