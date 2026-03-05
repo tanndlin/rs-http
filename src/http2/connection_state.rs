@@ -3,6 +3,7 @@ use hpack::{Decoder, Encoder};
 pub struct ConnectionState<'a> {
     pub decoder: Decoder<'a>,
     pub encoder: Encoder<'a>,
+    pub settings_acked: bool,
 }
 
 impl ConnectionState<'_> {
@@ -16,6 +17,7 @@ impl Default for ConnectionState<'_> {
         ConnectionState {
             decoder: Decoder::new(),
             encoder: Encoder::new(),
+            settings_acked: true,
         }
     }
 }

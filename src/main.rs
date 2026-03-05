@@ -177,8 +177,13 @@ fn handle_frame(
     // dbg!(&f);
     let stream_id = frame.get_stream_id();
 
+    if !matches!(frame, Frame::Settings(_)) && !state.settings_acked {
+        println!("Settings not acked, sending GOAWAY and closing connection");
+        return Err(HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError));
+    }
+
     match frame {
-        Frame::Settings(settings_frame) => handle_settings_frame(&settings_frame),
+        Frame::Settings(settings_frame) => handle_settings_frame(&settings_frame, state),
         Frame::Ping(ping_frame) => handle_ping_frame(ping_frame),
         _ => {
             // Determine if any stream is waiting for a continuation frame and, if so, which one.
@@ -243,12 +248,17 @@ fn handle_frame(
     }
 }
 
-fn handle_settings_frame(settings_frame: &SettingsFrame) -> Result<Vec<u8>, HTTP2Error> {
+fn handle_settings_frame(
+    settings_frame: &SettingsFrame,
+    state: &mut ConnectionState<'_>,
+) -> Result<Vec<u8>, HTTP2Error> {
     if settings_frame.header.stream_id != 0 {
         return Err(HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError));
     }
 
     if settings_frame.header.flags.ack {
+        state.settings_acked = true;
+
         return if settings_frame.header.length != 0 {
             Err(HTTP2Error::Connection(HTTP2ErrorCode::FrameSizeError))
         } else {
@@ -267,8 +277,11 @@ fn handle_settings_frame(settings_frame: &SettingsFrame) -> Result<Vec<u8>, HTTP
 
     dbg!(&my_settings);
 
-    let mut ret = my_settings.to_bytes();
-    SettingsFrame::new_ack(0).encode_to(&mut ret);
+    let mut ret = SettingsFrame::new_ack().to_bytes();
+    my_settings.encode_to(&mut ret);
+
+    state.settings_acked = false;
+
     Ok(ret)
 }
 

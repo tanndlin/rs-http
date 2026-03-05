@@ -62,13 +62,13 @@ pub struct SettingsFrame {
 }
 
 impl SettingsFrame {
-    pub fn new_ack(stream_identifier: u32) -> Self {
+    pub fn new_ack() -> Self {
         Self {
             header: FrameHeader {
                 length: 0,
                 frame_type: FrameType::Settings,
                 flags: SettingsFrameFlags { ack: true },
-                stream_id: stream_identifier,
+                stream_id: 0,
             },
             ..Default::default()
         }
