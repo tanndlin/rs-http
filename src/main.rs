@@ -125,9 +125,19 @@ fn handle_client(mut tcp_stream: SslStream<TcpStream>) {
 
         let result = match Frame::try_from(&buffer.read_n_bytes(full_frame_length)[..]) {
             Err(e) => {
-                dbg!(&e);
                 println!("Error parsing frame: {e:?}");
-                Ok(vec![])
+
+                // This should be a connection error if someone was waiting for a continuation frame
+                if streams.iter().any(|(_, s)| {
+                    let HTTP2Stream::Open(s) = s else {
+                        return false;
+                    };
+                    s.waiting_for_continuation()
+                }) {
+                    Err(HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError))
+                } else {
+                    Ok(vec![])
+                }
             }
             Ok(f) => {
                 // dbg!(&f);
