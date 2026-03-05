@@ -160,20 +160,17 @@ impl HTTP2StreamOpen {
             ));
         };
 
-        let path = match headers.get(":path") {
-            Some(path) => {
-                if path == "/" {
-                    "index.html".to_string()
-                } else {
-                    path.clone()
-                }
+        let Some(path) = headers.get(":path").map(|path| {
+            if path == "/" {
+                "index.html".to_string()
+            } else {
+                path.clone()
             }
-            None => {
-                return Err((
-                    self.close(false),
-                    HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
-                ));
-            }
+        }) else {
+            return Err((
+                self.close(false),
+                HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
+            ));
         };
 
         let path = state
@@ -259,20 +256,17 @@ impl HTTP2StreamOpen {
             ));
         };
 
-        let path = match headers.get(":path") {
-            Some(path) => {
-                if path == "/" {
-                    "index.html".to_string()
-                } else {
-                    path.clone()
-                }
+        let Some(path) = headers.get(":path").map(|path| {
+            if path == "/" {
+                "index.html".to_string()
+            } else {
+                path.clone()
             }
-            None => {
-                return Err((
-                    self.close(false),
-                    HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
-                ));
-            }
+        }) else {
+            return Err((
+                self.close(false),
+                HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
+            ));
         };
 
         let path = state
@@ -319,7 +313,7 @@ impl HTTP2StreamOpen {
             ));
         }
 
-        Ok((HTTP2Stream::Open(self), vec![]))
+        Ok((self.into(), vec![]))
     }
 
     fn handle_rst_stream_frame(

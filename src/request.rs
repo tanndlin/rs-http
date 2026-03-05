@@ -11,7 +11,7 @@ pub enum Method {
 }
 
 impl FromStr for Method {
-    type Err = &'static str;
+    type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -20,7 +20,7 @@ impl FromStr for Method {
             "PUT" => Ok(Method::PUT),
             "DELETE" => Ok(Method::DELETE),
             "HEAD" => Ok(Method::HEAD),
-            _ => Err("Unrecognized method"),
+            _ => Err(()),
         }
     }
 }
