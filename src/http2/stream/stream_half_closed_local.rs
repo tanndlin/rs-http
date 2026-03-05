@@ -13,7 +13,7 @@ impl HTTP2StreamHalfClosedLocal {
     pub fn handle_frame(
         self,
         frame: &Frame,
-    ) -> Result<(HTTP2Stream, Vec<u8>), (HTTP2Stream, HTTP2Error)> {
+    ) -> Result<(HTTP2Stream, Vec<Frame>), (HTTP2Stream, HTTP2Error)> {
         match frame {
             Frame::Priority(p) => self.handle_priority_frame(p),
             _ => todo!(),
@@ -23,7 +23,7 @@ impl HTTP2StreamHalfClosedLocal {
     fn handle_priority_frame(
         self,
         priority_frame: &PriorityFrame,
-    ) -> Result<(HTTP2Stream, Vec<u8>), (HTTP2Stream, HTTP2Error)> {
+    ) -> Result<(HTTP2Stream, Vec<Frame>), (HTTP2Stream, HTTP2Error)> {
         let id = self.id;
         println!("Got priority frame for stream {id}");
 

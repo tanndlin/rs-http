@@ -25,7 +25,7 @@ impl HTTP2Stream {
         self,
         frame: Frame,
         state: &mut ConnectionState,
-    ) -> Result<(HTTP2Stream, Vec<u8>), (HTTP2Stream, HTTP2Error)> {
+    ) -> Result<(HTTP2Stream, Vec<Frame>), (HTTP2Stream, HTTP2Error)> {
         match self {
             HTTP2Stream::Idle(stream) => stream.handle_frame(frame, state),
             HTTP2Stream::Open(stream) => stream.handle_frame(frame, state),

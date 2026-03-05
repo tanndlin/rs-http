@@ -17,7 +17,7 @@ impl HTTP2StreamIdle {
         self,
         frame: Frame,
         state: &mut ConnectionState,
-    ) -> Result<(HTTP2Stream, Vec<u8>), (HTTP2Stream, HTTP2Error)> {
+    ) -> Result<(HTTP2Stream, Vec<Frame>), (HTTP2Stream, HTTP2Error)> {
         match frame {
             Frame::Headers(headers_frame) => self.handle_headers_frame(headers_frame, state),
             Frame::Priority(priority_frame) => self.handle_priority_frame(&priority_frame),
@@ -36,7 +36,7 @@ impl HTTP2StreamIdle {
         self,
         headers_frame: HeadersFrame,
         state: &mut ConnectionState,
-    ) -> Result<(HTTP2Stream, Vec<u8>), (HTTP2Stream, HTTP2Error)> {
+    ) -> Result<(HTTP2Stream, Vec<Frame>), (HTTP2Stream, HTTP2Error)> {
         let ret_state = self.open();
         ret_state.handle_frame(Frame::Headers(headers_frame), state)
     }
@@ -54,7 +54,7 @@ impl HTTP2StreamIdle {
     fn handle_priority_frame(
         self,
         priority_frame: &PriorityFrame,
-    ) -> Result<(HTTP2Stream, Vec<u8>), (HTTP2Stream, HTTP2Error)> {
+    ) -> Result<(HTTP2Stream, Vec<Frame>), (HTTP2Stream, HTTP2Error)> {
         let id = self.id;
         println!("Got priority frame for stream {id}");
 

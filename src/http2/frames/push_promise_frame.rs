@@ -1,4 +1,7 @@
-use crate::http2::{error::HTTP2Error, frames::frame::FrameHeader};
+use crate::{
+    encode_to::EncodeTo,
+    http2::{error::HTTP2Error, frames::frame::FrameHeader},
+};
 
 #[derive(Debug)]
 pub struct PushPromiseFrameFlags {
@@ -15,6 +18,15 @@ impl From<u8> for PushPromiseFrameFlags {
             end_headers,
             padded,
         }
+    }
+}
+
+impl From<PushPromiseFrameFlags> for u8 {
+    fn from(flags: PushPromiseFrameFlags) -> Self {
+        let mut bits = 0u8;
+        bits |= u8::from(flags.end_headers) << 2;
+        bits |= u8::from(flags.padded) << 3;
+        bits
     }
 }
 
@@ -55,5 +67,18 @@ impl TryFrom<&[u8]> for PushPromiseFrame {
             stream_id,
             header_block_fragment,
         })
+    }
+}
+
+impl EncodeTo for PushPromiseFrame {
+    fn encode_to(self, buf: &mut Vec<u8>) {
+        let padding = self.header.flags.padded;
+        self.header.encode_to(buf);
+        if padding {
+            buf.push(self.pad_length);
+        }
+        let n = self.stream_id & !(1 << 31);
+        buf.extend(n.to_be_bytes());
+        buf.extend(self.header_block_fragment);
     }
 }

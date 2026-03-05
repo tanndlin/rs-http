@@ -86,12 +86,12 @@ macro_rules! read_or_return {
         match $buffer.read_from_stream($stream) {
             Ok(0) => {
                 println!("Client closed connection");
-                return;
+                break;
             }
             Ok(_) => continue,
             Err(e) => {
                 println!("Error reading from stream: {e}");
-                return;
+                break;
             }
         }
     };
@@ -125,27 +125,15 @@ fn handle_client(mut tcp_stream: SslStream<TcpStream>) {
 
         let result = match Frame::try_from(&buffer.read_n_bytes(full_frame_length)[..]) {
             Ok(frame) => handle_frame(&mut state, &mut streams, full_frame_length, frame),
-            Err(e) => {
-                // println!("Error parsing frame: {e:?}");
-
-                // // This should be a connection error if someone was waiting for a continuation frame
-                // if streams.iter().any(|(_, s)| {
-                //     let HTTP2Stream::Open(s) = s else {
-                //         return false;
-                //     };
-                //     s.waiting_for_continuation()
-                // }) {
-                //     Err(HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError))
-                // } else {
-                //     Ok(vec![])
-                // }
-                Err(e)
-            }
+            Err(e) => Err(e),
         };
 
         match result {
-            Ok(bytes) => {
-                let _ = tcp_stream.write(&bytes);
+            Ok(frames) => {
+                // TODO: make sure to respect max frame size and initial window size
+                for frame in frames {
+                    let _ = tcp_stream.write(&frame.to_bytes());
+                }
             }
             Err(e) => match e {
                 HTTP2Error::Connection(HTTP2ErrorCode::NoError) => (),
@@ -173,14 +161,14 @@ fn handle_frame(
     streams: &mut HashMap<u32, HTTP2Stream>,
     full_frame_length: usize,
     frame: Frame,
-) -> Result<Vec<u8>, HTTP2Error> {
-    // dbg!(&f);
+) -> Result<Vec<Frame>, HTTP2Error> {
+    dbg!(&frame);
     let stream_id = frame.get_stream_id();
 
-    if !matches!(frame, Frame::Settings(_)) && !state.settings_acked {
-        println!("Settings not acked, sending GOAWAY and closing connection");
-        return Err(HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError));
-    }
+    // if !matches!(frame, Frame::Settings(_)) && !state.settings_acked {
+    //     println!("Settings not acked, sending GOAWAY and closing connection");
+    //     return Err(HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError));
+    // }
 
     match frame {
         Frame::Settings(settings_frame) => handle_settings_frame(&settings_frame, state),
@@ -251,7 +239,7 @@ fn handle_frame(
 fn handle_settings_frame(
     settings_frame: &SettingsFrame,
     state: &mut ConnectionState<'_>,
-) -> Result<Vec<u8>, HTTP2Error> {
+) -> Result<Vec<Frame>, HTTP2Error> {
     if settings_frame.header.stream_id != 0 {
         return Err(HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError));
     }
@@ -266,32 +254,38 @@ fn handle_settings_frame(
         };
     }
 
-    let my_settings = SettingsFrameBuilder::new()
-        .enable_push(false)
-        .header_table_size(4096)
-        // .max_concurrent_streams(max) // unlimited
-        .initial_window_size(65535)
-        .max_frame_size(MAX_FRAME_SIZE)
-        // .max_header_list_size(size) // unlimited
-        .build();
+    if settings_frame.initial_window_size.is_some() {
+        state.settings.window_size = settings_frame.initial_window_size.unwrap();
+    }
 
-    dbg!(&my_settings);
+    let mut ret = vec![Frame::Settings(SettingsFrame::new_ack())];
 
-    let mut ret = SettingsFrame::new_ack().to_bytes();
-    my_settings.encode_to(&mut ret);
+    if !state.settings_sent {
+        let my_settings = SettingsFrameBuilder::new()
+            .enable_push(false)
+            .header_table_size(4096)
+            // .max_concurrent_streams(max) // unlimited
+            .initial_window_size(65535)
+            .max_frame_size(MAX_FRAME_SIZE)
+            // .max_header_list_size(size) // unlimited
+            .build();
+
+        dbg!(&my_settings);
+        ret.push(my_settings.into());
+        state.settings_sent = true;
+    }
 
     state.settings_acked = false;
 
     Ok(ret)
 }
 
-fn handle_ping_frame(ping_frame: PingFrame) -> Result<Vec<u8>, HTTP2Error> {
+fn handle_ping_frame(ping_frame: PingFrame) -> Result<Vec<Frame>, HTTP2Error> {
     if ping_frame.header.flags.ack {
         Ok(vec![])
     } else if ping_frame.header.stream_id != 0 || ping_frame.header.length != 8 {
         Err(HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError))
     } else {
-        let ack = PingFrame::ack(ping_frame);
-        Ok(ack.to_bytes())
+        Ok(vec![PingFrame::ack(ping_frame).into()])
     }
 }

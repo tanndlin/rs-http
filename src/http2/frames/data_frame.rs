@@ -3,8 +3,9 @@ use std::io::Read;
 use crate::{
     encode_to::EncodeTo,
     http2::{
+        connection_state::ConnectionState,
         error::HTTP2Error,
-        frames::frame::{FrameHeader, FrameType},
+        frames::frame::{Frame, FrameHeader, FrameType},
     },
     response::Response,
 };
@@ -44,6 +45,38 @@ pub struct DataFrame {
     pub data: Vec<u8>,
 }
 
+impl DataFrame {
+    pub fn get_data_frames(res: &Response, state: &ConnectionState<'_>) -> Vec<Self> {
+        let mut ret = vec![];
+
+        let window_size = state.settings.window_size as usize;
+        let mut remaining_data = res.body.as_slice();
+        while !remaining_data.is_empty() {
+            let chunk_size = remaining_data.len().min(window_size);
+            let chunk = &remaining_data[..chunk_size];
+            remaining_data = &remaining_data[chunk_size..];
+
+            let data_frame = DataFrame {
+                header: FrameHeader {
+                    #[allow(clippy::cast_possible_truncation)]
+                    length: chunk.len() as u32,
+                    frame_type: FrameType::Data,
+                    flags: DataFrameFlags {
+                        padding: false,
+                        end_stream: remaining_data.is_empty(),
+                    },
+                    stream_id: res.stream_id,
+                },
+                pad_length: 0,
+                data: chunk.to_vec(),
+            };
+            ret.push(data_frame);
+        }
+
+        ret
+    }
+}
+
 impl TryFrom<&[u8]> for DataFrame {
     type Error = HTTP2Error;
 
@@ -71,8 +104,8 @@ impl TryFrom<&[u8]> for DataFrame {
     }
 }
 
-impl From<&Response> for DataFrame {
-    fn from(res: &Response) -> Self {
+impl From<Response> for DataFrame {
+    fn from(res: Response) -> Self {
         Self {
             header: FrameHeader {
                 #[allow(clippy::cast_possible_truncation)]
@@ -85,8 +118,14 @@ impl From<&Response> for DataFrame {
                 stream_id: res.stream_id,
             },
             pad_length: 0,
-            data: res.body.clone(),
+            data: res.body,
         }
+    }
+}
+
+impl From<DataFrame> for Frame {
+    fn from(frame: DataFrame) -> Self {
+        Frame::Data(frame)
     }
 }
 

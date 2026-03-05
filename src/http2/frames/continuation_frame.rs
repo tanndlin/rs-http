@@ -1,4 +1,7 @@
-use crate::http2::{error::HTTP2Error, frames::frame::FrameHeader};
+use crate::{
+    encode_to::EncodeTo,
+    http2::{error::HTTP2Error, frames::frame::FrameHeader},
+};
 
 #[derive(Debug)]
 pub struct ContinuationFrameFlags {
@@ -10,6 +13,14 @@ impl From<u8> for ContinuationFrameFlags {
         let end_headers = (value & 4) > 0;
 
         Self { end_headers }
+    }
+}
+
+impl From<ContinuationFrameFlags> for u8 {
+    fn from(flags: ContinuationFrameFlags) -> Self {
+        let mut bits = 0u8;
+        bits |= u8::from(flags.end_headers) << 2;
+        bits
     }
 }
 
@@ -30,5 +41,12 @@ impl TryFrom<&[u8]> for ContinuationFrame {
             header,
             header_block_fragment,
         })
+    }
+}
+
+impl EncodeTo for ContinuationFrame {
+    fn encode_to(self, buf: &mut Vec<u8>) {
+        self.header.encode_to(buf);
+        buf.extend(self.header_block_fragment);
     }
 }

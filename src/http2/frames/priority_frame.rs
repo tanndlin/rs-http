@@ -1,4 +1,7 @@
-use crate::http2::{error::HTTP2Error, frames::frame::FrameHeader};
+use crate::{
+    encode_to::EncodeTo,
+    http2::{error::HTTP2Error, frames::frame::FrameHeader},
+};
 
 #[derive(Debug)]
 pub struct PriorityFrame {
@@ -24,5 +27,14 @@ impl TryFrom<&[u8]> for PriorityFrame {
             stream_dependency,
             weight,
         })
+    }
+}
+
+impl EncodeTo for PriorityFrame {
+    fn encode_to(self, buf: &mut Vec<u8>) {
+        self.header.encode_to(buf);
+        let n = (u32::from(self.exclusive) << 31) | self.stream_dependency;
+        buf.extend(n.to_be_bytes());
+        buf.push(self.weight);
     }
 }

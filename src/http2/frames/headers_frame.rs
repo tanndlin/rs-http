@@ -5,7 +5,7 @@ use crate::{
     http2::{
         connection_state::ConnectionState,
         error::HTTP2Error,
-        frames::frame::{FrameHeader, FrameType},
+        frames::frame::{Frame, FrameHeader, FrameType},
     },
     response::Response,
 };
@@ -142,6 +142,12 @@ impl From<(&Response, &mut ConnectionState<'_>)> for HeadersFrame {
             weight: None,
             header_block_fragment: encoded,
         }
+    }
+}
+
+impl From<HeadersFrame> for Frame {
+    fn from(frame: HeadersFrame) -> Self {
+        Frame::Headers(frame)
     }
 }
 

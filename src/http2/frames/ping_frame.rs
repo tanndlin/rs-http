@@ -2,7 +2,7 @@ use crate::{
     encode_to::EncodeTo,
     http2::{
         error::HTTP2Error,
-        frames::frame::{FrameHeader, FrameType},
+        frames::frame::{Frame, FrameHeader, FrameType},
     },
 };
 
@@ -53,6 +53,12 @@ impl TryFrom<&[u8]> for PingFrame {
         let data = buf[9..17].try_into().unwrap();
 
         Ok(Self { header, data })
+    }
+}
+
+impl From<PingFrame> for Frame {
+    fn from(frame: PingFrame) -> Self {
+        Frame::Ping(frame)
     }
 }
 

@@ -1,6 +1,6 @@
 use crate::http2::{
     error::{HTTP2Error, HTTP2ErrorCode},
-    frames::frame::{FrameHeader, FrameType},
+    frames::frame::{Frame, FrameHeader, FrameType},
 };
 
 use crate::encode_to::EncodeTo;
@@ -53,12 +53,12 @@ impl TryFrom<u16> for SettingsIdentifier {
 #[derive(Debug, Default)]
 pub struct SettingsFrame {
     pub header: FrameHeader<SettingsFrameFlags>,
-    header_table_size: Option<u32>,
-    enable_push: Option<bool>,
-    max_concurrent_streams: Option<u32>,
-    initial_window_size: Option<u32>,
-    max_frame_size: Option<u32>,
-    max_header_list_size: Option<u32>,
+    pub header_table_size: Option<u32>,
+    pub enable_push: Option<bool>,
+    pub max_concurrent_streams: Option<u32>,
+    pub initial_window_size: Option<u32>,
+    pub max_frame_size: Option<u32>,
+    pub max_header_list_size: Option<u32>,
 }
 
 impl SettingsFrame {
@@ -133,6 +133,12 @@ impl TryFrom<&[u8]> for SettingsFrame {
         }
 
         Ok(ret)
+    }
+}
+
+impl From<SettingsFrame> for Frame {
+    fn from(frame: SettingsFrame) -> Self {
+        Frame::Settings(frame)
     }
 }
 
