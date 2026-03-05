@@ -24,7 +24,7 @@ impl TryFrom<&[u8]> for ContinuationFrame {
 
     fn try_from(buf: &[u8]) -> Result<Self, Self::Error> {
         let header = FrameHeader::<ContinuationFrameFlags>::try_from(buf)?;
-        let header_block_fragment = buf[9..header.length as usize].to_vec();
+        let header_block_fragment = buf[9..9 + header.length as usize].to_vec();
 
         Ok(Self {
             header,
