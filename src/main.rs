@@ -279,10 +279,11 @@ fn handle_frame(
     full_frame_length: usize,
     frame: Frame,
 ) -> Result<Vec<Frame>, HTTP2Error> {
-    // dbg!(&frame);
+    dbg!(&frame);
     let stream_id = frame.get_stream_id();
 
     match frame {
+        Frame::PushPromise(_) => Err(HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError)),
         Frame::Settings(settings_frame) => handle_settings_frame(&settings_frame, state),
         Frame::Ping(ping_frame) => handle_ping_frame(ping_frame),
         _ => {

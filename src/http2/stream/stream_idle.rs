@@ -21,7 +21,6 @@ impl HTTP2StreamIdle {
         match frame {
             Frame::Headers(headers_frame) => self.handle_headers_frame(headers_frame, state),
             Frame::Priority(priority_frame) => self.handle_priority_frame(&priority_frame),
-            Frame::PushPromise(push_promise_frame) => todo!(),
             _ => {
                 println!("Got non-header/priority frame in idle state");
                 Err((
@@ -42,13 +41,11 @@ impl HTTP2StreamIdle {
     }
 
     pub fn close(self, end_stream: bool) -> HTTP2Stream {
-        println!("Closing stream: {}", self.id);
-        HTTP2Stream::Closed(HTTP2StreamClosed::new(self.id, end_stream))
+        HTTP2StreamClosed::new(self.id, end_stream).into()
     }
 
     pub fn open(self) -> HTTP2Stream {
-        println!("Opening stream: {}", self.id);
-        HTTP2Stream::Open(HTTP2StreamOpen::new(self.id))
+        HTTP2StreamOpen::new(self.id).into()
     }
 
     fn handle_priority_frame(
@@ -56,7 +53,6 @@ impl HTTP2StreamIdle {
         priority_frame: &PriorityFrame,
     ) -> Result<(HTTP2Stream, Vec<Frame>), (HTTP2Stream, HTTP2Error)> {
         let id = self.id;
-        println!("Got priority frame for stream {id}");
 
         if priority_frame.stream_dependency == id {
             return Err((
