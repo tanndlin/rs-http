@@ -68,7 +68,6 @@ fn main() {
 
     let listener = TcpListener::bind("0.0.0.0:443").expect("Unable to bind to 0.0.0.0:443");
     println!("Listening on: 0.0.0.0:443");
-    // println!("Serving files from: {}", args[1]);
 
     let num_cores = available_parallelism().unwrap().get();
     let pool = ThreadPool::new(num_cores);
@@ -77,10 +76,9 @@ fn main() {
         match tcp_stream {
             Ok(tcp_stream) => {
                 let acceptor = acceptor.clone();
-                let peer_id = tcp_stream.peer_addr().unwrap();
-                dbg!(peer_id);
                 let ssl_stream = acceptor.accept(tcp_stream).unwrap();
                 let serve_location = serve_location.clone();
+
                 pool.execute(move || handle_client(ssl_stream, serve_location));
             }
             Err(e) => println!("Unable to get stream from client: {e}"),
@@ -112,8 +110,6 @@ fn flush_outbound_frames(
     state: &mut ConnectionState<'_>,
     outbound: &mut VecDeque<Frame>,
 ) -> std::io::Result<()> {
-    println!("Flushing {} outbound frames", outbound.len());
-
     while let Some(frame) = outbound.pop_front() {
         match frame {
             Frame::Data(mut data_frame) => {
@@ -146,12 +142,6 @@ fn flush_outbound_frames(
                         .streams
                         .insert(data_frame.header.stream_id, stream.server_sent_es());
                 }
-
-                println!(
-                    "Sending data frame of size {} on stream {}",
-                    df.data.len(),
-                    df.header.stream_id
-                );
 
                 tcp_stream.write_all(&df.to_bytes())?;
                 state.sent_data(data_frame.header.stream_id, chunk_size as i32);
@@ -216,8 +206,6 @@ fn handle_client(mut tcp_stream: SslStream<TcpStream>, serve_location: PathBuf) 
             read_or_return!(buffer, &mut tcp_stream);
         }
 
-        println!("Parsing frame of length {full_frame_length}");
-
         let result = match Frame::try_from(&buffer.read_n_bytes(full_frame_length)[..]) {
             Ok(frame) => handle_frame(&mut state, full_frame_length, frame),
             Err(e) => {
@@ -267,11 +255,6 @@ fn handle_client(mut tcp_stream: SslStream<TcpStream>, serve_location: PathBuf) 
             },
         }
     }
-
-    println!(
-        "Connection closed for peer {}",
-        tcp_stream.get_ref().peer_addr().unwrap()
-    );
 }
 
 fn handle_frame(
@@ -359,12 +342,10 @@ fn handle_frame(
 
             match stream.handle_frame(frame, state) {
                 Ok((stream_state, frames)) => {
-                    println!("writing Ok to {stream_id}");
                     state.streams.insert(stream_id, stream_state);
                     Ok(frames)
                 }
                 Err((stream_state, e)) => {
-                    println!("writing Err to {stream_id}");
                     state.streams.insert(stream_id, stream_state);
                     Err(e)
                 }

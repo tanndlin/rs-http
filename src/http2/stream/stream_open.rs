@@ -113,7 +113,6 @@ impl HTTP2StreamOpen {
         state: &mut ConnectionState,
         headers_frame: HeadersFrame,
     ) -> Result<(HTTP2Stream, Vec<Frame>), (HTTP2Stream, HTTP2Error)> {
-        println!("Handling headers frame for stream {}", self.id);
         self.header_builder
             .new_fragment(headers_frame.header_block_fragment);
         if !headers_frame.header.flags.end_headers {
@@ -344,12 +343,10 @@ impl HTTP2StreamOpen {
     }
 
     pub fn half_close_local(self) -> HTTP2Stream {
-        println!("Half-closing stream locally: {}", self.id);
         HTTP2StreamHalfClosedLocal { id: self.id }.into()
     }
 
     pub fn half_close_remote(self) -> HTTP2Stream {
-        println!("Half-closing stream remotely: {}", self.id);
         HTTP2StreamHalfClosedRemote { id: self.id }.into()
     }
 

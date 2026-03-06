@@ -11,8 +11,6 @@ pub fn u32_from_3_bytes(buf: [u8; 3]) -> u32 {
 }
 
 pub fn handle_request(request: &Request) -> Result<Response, String> {
-    println!("Got request");
-
     match request.method {
         Method::GET => handle_get(request),
         Method::HEAD => handle_head(request),
