@@ -42,4 +42,14 @@ impl HTTP2Stream {
     pub fn new(id: u32) -> Self {
         HTTP2Stream::Idle(HTTP2StreamIdle { id })
     }
+
+    pub fn server_sent_es(self) -> Self {
+        match self {
+            HTTP2Stream::Open(stream) => HTTP2StreamHalfClosedLocal { id: stream.id }.into(),
+            HTTP2Stream::HalfClosedRemote(stream) => HTTP2StreamClosed::new(stream.id, true).into(),
+            _ => panic!(
+                "Invalid state transition: only open and half closed remote streams can be transitioned to half closed local"
+            ),
+        }
+    }
 }

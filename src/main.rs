@@ -140,6 +140,13 @@ fn flush_outbound_frames(
                     send_end_stream,
                 );
 
+                if send_end_stream {
+                    let stream = state.streams.remove(&data_frame.header.stream_id).unwrap();
+                    state
+                        .streams
+                        .insert(data_frame.header.stream_id, stream.server_sent_es());
+                }
+
                 println!(
                     "Sending data frame of size {} on stream {}",
                     df.data.len(),
@@ -274,11 +281,6 @@ fn handle_frame(
 ) -> Result<Vec<Frame>, HTTP2Error> {
     // dbg!(&frame);
     let stream_id = frame.get_stream_id();
-
-    // if !matches!(frame, Frame::Settings(_)) && !state.settings_acked {
-    //     println!("Settings not acked, sending GOAWAY and closing connection");
-    //     return Err(HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError));
-    // }
 
     match frame {
         Frame::Settings(settings_frame) => handle_settings_frame(&settings_frame, state),
