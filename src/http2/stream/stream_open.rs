@@ -7,7 +7,7 @@ use crate::{
         error::{HTTP2Error, HTTP2ErrorCode, StreamError},
         frames::{
             continuation_frame::ContinuationFrame, data_frame::DataFrame, frame::Frame,
-            headers_frame::HeadersFrame, priority_frame::PriorityFrame,
+            headers_frame::HeadersFrame, priority_frame::PriorityFrame, rst_frame::RstFrame,
         },
         header_builder::HeaderBuilder,
         stream::{
@@ -47,6 +47,7 @@ impl HTTP2StreamOpen {
                 self.handle_continuation_frame(state, continuation_frame)
             }
             Frame::Priority(priority_frame) => self.handle_priority_frame(&priority_frame),
+            Frame::RstStream(rst_frame) => self.handle_rst_stream_frame(&rst_frame),
             _ => todo!("Open stream received unsupported frame type: {:?}", frame),
         }
     }
@@ -249,6 +250,27 @@ impl HTTP2StreamOpen {
         Ok((HTTP2Stream::Open(self), vec![]))
     }
 
+    fn handle_rst_stream_frame(
+        self,
+        rst_frame: &RstFrame,
+    ) -> Result<(HTTP2Stream, Vec<Frame>), (HTTP2Stream, HTTP2Error)> {
+        let Ok(error_code) = HTTP2ErrorCode::try_from(rst_frame.error_code) else {
+            return Ok((self.into(), vec![]));
+        };
+
+        println!(
+            "Received RST_STREAM frame for stream {}, closing stream",
+            self.id
+        );
+        Err((
+            self.close(true),
+            HTTP2Error::Stream(StreamError {
+                stream_id: rst_frame.header.stream_id,
+                error_code,
+            }),
+        ))
+    }
+
     pub fn waiting_for_continuation(&self) -> bool {
         self.header_builder.waiting_for_continuation()
     }
@@ -270,5 +292,9 @@ impl HTTP2StreamOpen {
                 id: self.id,
             },
         )
+    }
+
+    pub fn into(self) -> HTTP2Stream {
+        HTTP2Stream::Open(self)
     }
 }
