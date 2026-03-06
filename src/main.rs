@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
     sync::Arc,
@@ -10,7 +9,7 @@ use crate::{
     encode_to::EncodeTo,
     http2::{
         connection_state::ConnectionState,
-        error::{HTTP2Error, HTTP2ErrorCode},
+        error::{HTTP2Error, HTTP2ErrorCode, StreamError},
         frames::{
             frame::Frame,
             go_away_frame::GoAwayFrame,
@@ -99,7 +98,6 @@ macro_rules! read_or_return {
 
 fn handle_client(mut tcp_stream: SslStream<TcpStream>) {
     let mut state = ConnectionState::new();
-    let mut streams: HashMap<u32, HTTP2Stream> = HashMap::new();
 
     // Should start with the HTTP/2 Connection Preface
     let mut preface = [0; 24];
@@ -124,7 +122,7 @@ fn handle_client(mut tcp_stream: SslStream<TcpStream>) {
         println!("Parsing frame of length {full_frame_length}");
 
         let result = match Frame::try_from(&buffer.read_n_bytes(full_frame_length)[..]) {
-            Ok(frame) => handle_frame(&mut state, &mut streams, full_frame_length, frame),
+            Ok(frame) => handle_frame(&mut state, full_frame_length, frame),
             Err(e) => Err(e),
         };
 
@@ -158,7 +156,6 @@ fn handle_client(mut tcp_stream: SslStream<TcpStream>) {
 
 fn handle_frame(
     state: &mut ConnectionState<'_>,
-    streams: &mut HashMap<u32, HTTP2Stream>,
     full_frame_length: usize,
     frame: Frame,
 ) -> Result<Vec<Frame>, HTTP2Error> {
@@ -175,7 +172,7 @@ fn handle_frame(
         Frame::Ping(ping_frame) => handle_ping_frame(ping_frame),
         _ => {
             // Determine if any stream is waiting for a continuation frame and, if so, which one.
-            let waiting_for_continuation_stream_id = streams.iter().find_map(|(id, s)| {
+            let waiting_for_continuation_stream_id = state.streams.iter().find_map(|(id, s)| {
                 let HTTP2Stream::Open(s) = s else {
                     return None;
                 };
@@ -199,12 +196,34 @@ fn handle_frame(
                 return Err(HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError));
             }
 
+            if let Frame::WindowUpdate(window_update) = &frame {
+                if window_update.window_size_increment == 0 {
+                    match window_update.header.stream_id {
+                        0 => {
+                            println!(
+                                "Received invalid window update with stream id 0, sending GOAWAY and closing connection"
+                            );
+                            return Err(HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError));
+                        }
+                        stream_id => {
+                            return Err(HTTP2Error::Stream(StreamError {
+                                stream_id,
+                                error_code: HTTP2ErrorCode::ProtocolError,
+                            }));
+                        }
+                    }
+                }
+
+                state.update_window(window_update)?;
+                return Ok(vec![]);
+            }
+
             // TODO: See if there is a way to do state management without push and pop
-            let stream = if let Some(s) = streams.remove(&stream_id) {
+            let stream = if let Some(s) = state.streams.remove(&stream_id) {
                 s
             } else {
                 if stream_id.is_multiple_of(2)
-                    || stream_id < streams.keys().copied().max().unwrap_or(0)
+                    || stream_id < state.streams.keys().copied().max().unwrap_or(0)
                 {
                     return Err(HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError));
                 }
@@ -223,12 +242,12 @@ fn handle_frame(
             match stream.handle_frame(frame, state) {
                 Ok((stream_state, bytes)) => {
                     println!("writing Ok to {stream_id}");
-                    streams.insert(stream_id, stream_state);
+                    state.streams.insert(stream_id, stream_state);
                     Ok(bytes)
                 }
                 Err((stream_state, e)) => {
                     println!("writing Err to {stream_id}");
-                    streams.insert(stream_id, stream_state);
+                    state.streams.insert(stream_id, stream_state);
                     Err(e)
                 }
             }

@@ -47,7 +47,7 @@ impl HTTP2StreamOpen {
                 self.handle_continuation_frame(state, continuation_frame)
             }
             Frame::Priority(priority_frame) => self.handle_priority_frame(&priority_frame),
-            _ => todo!(),
+            _ => todo!("Open stream received unsupported frame type: {:?}", frame),
         }
     }
 
