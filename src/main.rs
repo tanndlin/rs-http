@@ -253,7 +253,7 @@ fn handle_frame(
     full_frame_length: usize,
     frame: Frame,
 ) -> Result<Vec<Frame>, HTTP2Error> {
-    dbg!(&frame);
+    // dbg!(&frame);
     let stream_id = frame.get_stream_id();
 
     // if !matches!(frame, Frame::Settings(_)) && !state.settings_acked {
@@ -382,7 +382,7 @@ fn handle_settings_frame(
         state.settings.max_frame_size = settings_frame.max_frame_size.unwrap();
     }
 
-    let mut ret = vec![Frame::Settings(SettingsFrame::new_ack())];
+    let mut ret = vec![];
 
     if !state.settings_sent {
         let my_settings = SettingsFrameBuilder::new()
@@ -399,6 +399,7 @@ fn handle_settings_frame(
         state.settings_sent = true;
     }
 
+    ret.push(SettingsFrame::new_ack().into());
     state.settings_acked = false;
 
     Ok(ret)
