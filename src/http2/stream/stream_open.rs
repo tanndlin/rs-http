@@ -93,7 +93,7 @@ impl HTTP2StreamOpen {
                 }
             }
 
-            let Some(res) = handle_request(&req).ok() else {
+            let Some(res) = handle_request(&req, &state.cache).ok() else {
                 return Err((
                     self.close(end_stream),
                     HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
@@ -160,7 +160,7 @@ impl HTTP2StreamOpen {
 
         let Some(path) = headers.get(":path").map(|path| {
             if path == "/" {
-                "index.html".to_string()
+                "/index.html".to_string()
             } else {
                 path.clone()
             }
@@ -170,12 +170,6 @@ impl HTTP2StreamOpen {
                 HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
             ));
         };
-
-        let path = state
-            .serve_location
-            .join(path.strip_prefix('/').unwrap_or(&path))
-            .to_string_lossy()
-            .into_owned();
 
         let req = Request {
             headers,
@@ -190,7 +184,7 @@ impl HTTP2StreamOpen {
             return Ok((HTTP2Stream::Open(self), vec![]));
         }
 
-        let Ok(res) = handle_request(&req) else {
+        let Ok(res) = handle_request(&req, &state.cache) else {
             return Err((
                 self.close(end_stream),
                 HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
@@ -254,7 +248,7 @@ impl HTTP2StreamOpen {
 
         let Some(path) = headers.get(":path").map(|path| {
             if path == "/" {
-                "index.html".to_string()
+                "/index.html".to_string()
             } else {
                 path.clone()
             }
@@ -265,12 +259,6 @@ impl HTTP2StreamOpen {
             ));
         };
 
-        let path = state
-            .serve_location
-            .join(path.strip_prefix('/').unwrap_or(&path))
-            .to_string_lossy()
-            .into_owned();
-
         let req = Request {
             headers,
             method,
@@ -279,7 +267,7 @@ impl HTTP2StreamOpen {
             body: vec![],
         };
 
-        let Ok(res) = handle_request(&req) else {
+        let Ok(res) = handle_request(&req, &state.cache) else {
             return Err((
                 self.close(false),
                 HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),

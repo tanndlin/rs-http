@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use hpack::{Decoder, Encoder};
 
@@ -23,12 +23,14 @@ pub struct ConnectionState<'a> {
     pub streams: HashMap<u32, HTTP2Stream>,
     pub window_size: i32,
     pub stream_window_sizes: HashMap<u32, i32>, // TODO: this needs to be refactored into the stream struct
+    pub cache: Arc<HashMap<String, Vec<u8>>>,
 }
 
 impl ConnectionState<'_> {
-    pub fn new(serve_location: PathBuf) -> Self {
+    pub fn new(serve_location: PathBuf, cache: Arc<HashMap<String, Vec<u8>>>) -> Self {
         Self {
             serve_location,
+            cache,
             ..Default::default()
         }
     }
@@ -117,6 +119,7 @@ impl Default for ConnectionState<'_> {
     fn default() -> Self {
         ConnectionState {
             serve_location: PathBuf::from("./public"),
+            cache: Arc::new(HashMap::new()),
             decoder: Decoder::new(),
             encoder: Encoder::new(),
             settings_acked: true,

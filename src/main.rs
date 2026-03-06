@@ -1,5 +1,5 @@
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     io::{Read, Write},
     net::{TcpListener, TcpStream},
     path::PathBuf,
@@ -23,6 +23,7 @@ use crate::{
         gc_buffer::GCBuffer,
         stream::http_stream::HTTP2Stream,
     },
+    read::cache_all_files,
     util::u32_from_3_bytes,
 };
 
@@ -48,6 +49,9 @@ fn main() {
         args[1]
     );
     println!("Serving files from: {}", serve_location.display());
+
+    let cache = Arc::new(cache_all_files(serve_location.to_str().unwrap()).unwrap());
+    println!("Cached {} files", cache.len());
 
     // Build TLS acceptor
     let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
@@ -78,8 +82,9 @@ fn main() {
                 let acceptor = acceptor.clone();
                 let ssl_stream = acceptor.accept(tcp_stream).unwrap();
                 let serve_location = serve_location.clone();
+                let cache = cache.clone();
 
-                pool.execute(move || handle_client(ssl_stream, serve_location));
+                pool.execute(move || handle_client(ssl_stream, serve_location, cache));
             }
             Err(e) => println!("Unable to get stream from client: {e}"),
         }
@@ -171,8 +176,12 @@ fn flush_outbound_frames(
     Ok(())
 }
 
-fn handle_client(mut tcp_stream: SslStream<TcpStream>, serve_location: PathBuf) {
-    let mut state = ConnectionState::new(serve_location);
+fn handle_client(
+    mut tcp_stream: SslStream<TcpStream>,
+    serve_location: PathBuf,
+    cache: Arc<HashMap<String, Vec<u8>>>,
+) {
+    let mut state = ConnectionState::new(serve_location, cache);
 
     // Should start with the HTTP/2 Connection Preface
     let mut preface = [0; 24];
