@@ -59,24 +59,43 @@ impl HTTP2StreamOpen {
         }
     }
 
+    // TODO this should be half-closed remote if end stream is set
     fn handle_data_frame(
         mut self,
         state: &mut ConnectionState,
         data_frame: DataFrame,
     ) -> Result<(HTTP2Stream, Vec<Frame>), (HTTP2Stream, HTTP2Error)> {
         println!("Handling data frame for stream {}", self.id);
+        let end_stream = data_frame.header.flags.end_stream;
         let Some(mut req) = self.pending_request.take() else {
             return Err((
-                self.close(false),
+                self.close(end_stream),
                 HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
             ));
         };
 
         req.body.extend(data_frame.data);
-        if data_frame.header.flags.end_stream {
+        if end_stream {
+            // Make sure content-length header matches body length if it exists
+            if let Some(content_length) = req.headers.get("content-length") {
+                let Ok(content_length) = content_length.parse::<usize>() else {
+                    return Err((
+                        self.close(end_stream),
+                        HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
+                    ));
+                };
+
+                if content_length != req.body.len() {
+                    return Err((
+                        self.close(end_stream),
+                        HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
+                    ));
+                }
+            }
+
             let Some(res) = handle_request(&req).ok() else {
                 return Err((
-                    self.close(data_frame.header.flags.end_stream),
+                    self.close(end_stream),
                     HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
                 ));
             };
@@ -84,7 +103,7 @@ impl HTTP2StreamOpen {
 
             let mut frames = vec![HeadersFrame::from((&res, &mut *state)).into()];
             frames.push(Frame::Data(DataFrame::from(res)));
-            Ok((self.close(data_frame.header.flags.end_stream), frames))
+            Ok((self.close(end_stream), frames))
         } else {
             Ok((self.into(), vec![]))
         }
