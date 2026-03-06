@@ -1,7 +1,6 @@
 use std::str::FromStr;
 
 use crate::{
-    encode_to::EncodeTo,
     http2::{
         connection_state::ConnectionState,
         error::{HTTP2Error, HTTP2ErrorCode, StreamError},
@@ -188,6 +187,14 @@ impl HTTP2StreamOpen {
         continuation_frame: ContinuationFrame,
     ) -> Result<(HTTP2Stream, Vec<Frame>), (HTTP2Stream, HTTP2Error)> {
         println!("Handling continuation frame for stream {}", self.id);
+
+        if !self.header_builder.waiting_for_continuation() {
+            return Err((
+                self.close(false),
+                HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
+            ));
+        }
+
         self.header_builder
             .new_fragment(continuation_frame.header_block_fragment);
         if !continuation_frame.header.flags.end_headers {
