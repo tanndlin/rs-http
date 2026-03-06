@@ -50,7 +50,7 @@ impl HeaderBuilder {
         if headers
             .keys()
             .filter(|h| h.starts_with(':'))
-            .any(|h| PsuedoHeader::from_str(h).is_err())
+            .any(|h| PsuedoHeader::from_str(h).is_err() || *h == PsuedoHeader::Status.to_string())
         {
             return Err(HTTP2Error::Stream(StreamError {
                 stream_id,

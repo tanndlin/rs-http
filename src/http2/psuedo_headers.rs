@@ -22,3 +22,15 @@ impl FromStr for PsuedoHeader {
         }
     }
 }
+
+impl ToString for PsuedoHeader {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Method => ":method".to_string(),
+            Self::Scheme => ":scheme".to_string(),
+            Self::Authority => ":authority".to_string(),
+            Self::Path => ":path".to_string(),
+            Self::Status => ":status".to_string(),
+        }
+    }
+}
