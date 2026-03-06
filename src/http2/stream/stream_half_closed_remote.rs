@@ -24,7 +24,14 @@ impl HTTP2StreamHalfClosedRemote {
                 }
                 Ok((self.into(), vec![]))
             }
-            _ => todo!(),
+            Frame::RstStream(rst) => {
+                println!(
+                    "Received RST_STREAM for stream {}, closing stream",
+                    rst.header.stream_id
+                );
+                Ok((self.close(true), vec![]))
+            }
+            _ => todo!("Frame not implemented for half closed remote stream: {frame:?}"),
         }
     }
 
