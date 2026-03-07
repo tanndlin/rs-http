@@ -26,8 +26,9 @@ impl HTTP2StreamHalfClosedRemote {
             }
             Frame::RstStream(rst) => {
                 println!(
-                    "Received RST_STREAM for stream {}, closing stream",
-                    rst.header.stream_id
+                    "Received RST_STREAM for stream {}, closing stream. Reason: {:?}",
+                    rst.header.stream_id,
+                    HTTP2ErrorCode::try_from(rst.error_code).unwrap(),
                 );
                 Ok((self.close(true), vec![]))
             }

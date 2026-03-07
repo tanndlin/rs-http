@@ -371,6 +371,8 @@ fn handle_settings_frame(
         };
     }
 
+    dbg!(&settings_frame);
+
     if let Some(initial_window_size) = settings_frame.initial_window_size {
         #[allow(clippy::cast_possible_wrap)]
         let initial_window_size = initial_window_size as i32;
@@ -384,6 +386,10 @@ fn handle_settings_frame(
 
     if settings_frame.max_frame_size.is_some() {
         state.settings.max_frame_size = settings_frame.max_frame_size.unwrap();
+        println!(
+            "Updated max frame size to {}",
+            state.settings.max_frame_size
+        );
     }
 
     let mut ret = vec![];

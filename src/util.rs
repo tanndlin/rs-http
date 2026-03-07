@@ -14,6 +14,8 @@ pub fn handle_request(
     request: &Request,
     cache: &Arc<HashMap<String, Vec<u8>>>,
 ) -> Result<Response, String> {
+    dbg!(&request);
+
     match request.method {
         Method::GET => handle_get(request, cache),
         Method::HEAD => handle_head(request, cache),
@@ -35,21 +37,22 @@ fn handle_get(
         return Ok(Response::bad_request(request.stream_id));
     }
 
-    let slice = if let Some(range) = request.headers.get("Content-Range") {
-        let range = range
-            .strip_prefix("bytes=")
-            .ok_or("Invalid Content-Range header")?;
+    let slice = if let Some(range) = request.headers.get("range") {
+        let range = range.strip_prefix("bytes=").ok_or("Invalid range header")?;
         let mut split = range.split('-');
         let start = split
             .next()
-            .ok_or("Invalid Content-Range header")?
+            .ok_or("Invalid range header")?
             .parse::<usize>()
-            .map_err(|_| "Invalid Content-Range header")?;
-        let end = split
-            .next()
-            .ok_or("Invalid Content-Range header")?
-            .parse::<usize>()
-            .map_err(|_| "Invalid Content-Range header")?;
+            .map_err(|_| "Invalid range header")?;
+
+        let end = if let Some(end) = split.next()
+            && !end.is_empty()
+        {
+            Some(end.parse::<usize>().map_err(|_| "Invalid range header")?)
+        } else {
+            None
+        };
         Some((start, end))
     } else {
         None
@@ -58,20 +61,41 @@ fn handle_get(
     match cache.get(&request.path) {
         Some(bytes) => {
             let bytes = if let Some((start, end)) = slice {
-                if start >= bytes.len() || end >= bytes.len() || start > end {
-                    return Ok(Response::bad_request(request.stream_id));
+                if start >= bytes.len() {
+                    return Ok(Response::range_not_satisfiable(request.stream_id));
                 }
-                bytes[start..=end].to_vec()
+                let end = end.unwrap_or(bytes.len());
+                if end > bytes.len() {
+                    return Ok(Response::range_not_satisfiable(request.stream_id));
+                }
+                bytes[start..end].to_vec()
             } else {
                 bytes.clone()
             };
 
-            Ok(ResponseBuilder::new()
-                .status_code(StatusCode::Ok)
-                .header("Content-Type".to_string(), content_type.into())
+            let len = bytes.len();
+
+            let mut builder = ResponseBuilder::new()
                 .stream_id(request.stream_id)
-                .body(bytes.clone())
-                .build())
+                .header("content-type".to_string(), content_type.to_string())
+                .header("content-length".to_string(), len.to_string())
+                .body(bytes);
+
+            if slice.is_some() {
+                builder = builder.status_code(StatusCode::PartialContent).header(
+                    "content-range".to_string(),
+                    format!(
+                        "bytes {}-{}/{}",
+                        slice.unwrap().0,
+                        slice.unwrap().1.unwrap_or(len - 1),
+                        len
+                    ),
+                );
+            } else {
+                builder = builder.status_code(StatusCode::Ok);
+            }
+
+            Ok(builder.build())
         }
         None => Ok(Response::not_found(request.stream_id)),
     }
@@ -91,21 +115,22 @@ fn handle_head(
         return Ok(Response::bad_request(request.stream_id));
     }
 
-    let slice = if let Some(range) = request.headers.get("Content-Range") {
-        let range = range
-            .strip_prefix("bytes=")
-            .ok_or("Invalid Content-Range header")?;
+    let slice = if let Some(range) = request.headers.get("range") {
+        let range = range.strip_prefix("bytes=").ok_or("Invalid range header")?;
         let mut split = range.split('-');
         let start = split
             .next()
-            .ok_or("Invalid Content-Range header")?
+            .ok_or("Invalid range header")?
             .parse::<usize>()
-            .map_err(|_| "Invalid Content-Range header")?;
-        let end = split
-            .next()
-            .ok_or("Invalid Content-Range header")?
-            .parse::<usize>()
-            .map_err(|_| "Invalid Content-Range header")?;
+            .map_err(|_| "Invalid range header")?;
+
+        let end = if let Some(end) = split.next()
+            && !end.is_empty()
+        {
+            Some(end.parse::<usize>().map_err(|_| "Invalid range header")?)
+        } else {
+            None
+        };
         Some((start, end))
     } else {
         None
@@ -113,21 +138,28 @@ fn handle_head(
 
     match cache.get(&request.path) {
         Some(bytes) => {
-            let bytes = if let Some((start, end)) = slice {
-                if start >= bytes.len() || end >= bytes.len() || start > end {
-                    return Ok(Response::bad_request(request.stream_id));
-                }
-                bytes[start..=end].to_vec()
-            } else {
-                bytes.clone()
-            };
+            let len = bytes.len();
 
-            Ok(ResponseBuilder::new()
-                .status_code(StatusCode::Ok)
-                .header("Content-Type".to_string(), content_type.into())
-                .header("Content-Length".to_string(), bytes.len().to_string())
+            let mut builder = ResponseBuilder::new()
                 .stream_id(request.stream_id)
-                .build())
+                .header("content-type".to_string(), content_type.to_string())
+                .header("content-length".to_string(), len.to_string());
+
+            if slice.is_some() {
+                builder = builder.status_code(StatusCode::PartialContent).header(
+                    "content-range".to_string(),
+                    format!(
+                        "bytes {}-{}/{}",
+                        slice.unwrap().0,
+                        slice.unwrap().1.unwrap_or(len - 1),
+                        len
+                    ),
+                );
+            } else {
+                builder = builder.status_code(StatusCode::Ok);
+            }
+
+            Ok(builder.build())
         }
         None => Ok(Response::not_found(request.stream_id)),
     }

@@ -3,17 +3,21 @@ use std::{collections::HashMap, fmt::Display};
 #[derive(Debug)]
 pub enum StatusCode {
     Ok,
+    PartialContent,
     NotFound,
     BadRequest,
     MethodNotAllowed,
     InteralServerError,
+    RangeNotSatisfiable,
 }
 
 impl Display for StatusCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             StatusCode::Ok => write!(f, "200 OK"),
+            StatusCode::PartialContent => write!(f, "206 Partial Content"),
             StatusCode::NotFound => write!(f, "404 Not Found"),
+            StatusCode::RangeNotSatisfiable => write!(f, "416 Range Not Satisfiable"),
             StatusCode::BadRequest => write!(f, "400 Bad Request"),
             StatusCode::MethodNotAllowed => write!(f, "405 Method Not Allowed"),
             StatusCode::InteralServerError => write!(f, "500 Internal Server Error"),
@@ -25,7 +29,9 @@ impl StatusCode {
     pub fn to_code(&self) -> u32 {
         match self {
             StatusCode::Ok => 200,
+            StatusCode::PartialContent => 206,
             StatusCode::NotFound => 404,
+            StatusCode::RangeNotSatisfiable => 416,
             StatusCode::BadRequest => 400,
             StatusCode::MethodNotAllowed => 405,
             StatusCode::InteralServerError => 500,
@@ -45,6 +51,13 @@ impl Response {
     pub fn bad_request(stream_id: u32) -> Self {
         ResponseBuilder::new()
             .status_code(StatusCode::BadRequest)
+            .stream_id(stream_id)
+            .build()
+    }
+
+    pub fn range_not_satisfiable(stream_id: u32) -> Self {
+        ResponseBuilder::new()
+            .status_code(StatusCode::RangeNotSatisfiable)
             .stream_id(stream_id)
             .build()
     }
