@@ -42,6 +42,7 @@ mod util;
 fn main() {
     // Log args
     let args: Vec<String> = std::env::args().collect();
+    dbg!(&args);
     assert!(args.len() == 2, "Expected 1 argument (serve folder)");
     let serve_location = PathBuf::from(&args[1]);
     assert!(

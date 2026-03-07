@@ -11,6 +11,13 @@ pub enum ImageType {
 
 #[derive(PartialEq, Eq)]
 #[allow(clippy::upper_case_acronyms)]
+pub enum VideoType {
+    MP4,
+    MKV,
+}
+
+#[derive(PartialEq, Eq)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum ContentType {
     HTML,
     Text,
@@ -18,6 +25,7 @@ pub enum ContentType {
     CSS,
     JSON,
     Image(ImageType),
+    Video(VideoType),
     Unknown,
 }
 
@@ -33,6 +41,8 @@ impl ContentType {
             "jpg" | "jpeg" => ContentType::Image(ImageType::JPEG),
             "ico" => ContentType::Image(ImageType::Icon),
             "gif" => ContentType::Image(ImageType::GIF),
+            "mp4" => ContentType::Video(VideoType::MP4),
+            "mkv" => ContentType::Video(VideoType::MKV),
             _ => ContentType::Unknown,
         }
     }
@@ -56,6 +66,8 @@ impl Display for ContentType {
             ContentType::Image(ImageType::JPEG) => "image/jpeg",
             ContentType::Image(ImageType::GIF) => "image/gif",
             ContentType::Image(ImageType::Icon) => "image/x-icon",
+            ContentType::Video(VideoType::MP4) => "video/mp4",
+            ContentType::Video(VideoType::MKV) => "video/x-matroska",
             ContentType::Unknown => "application/octet-stream",
         };
         write!(f, "{content_type_str}")
