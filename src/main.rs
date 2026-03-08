@@ -16,7 +16,7 @@ use crate::{
         frames::{
             data_frame::{DataFrame, DataFrameFlags},
             frame::{Frame, FrameHeader, FrameType},
-            go_away_frame::GoAwayFrame,
+            go_away_frame::{self, GoAwayFrame},
             ping_frame::PingFrame,
             rst_frame::RstFrame,
             settings_frame::{SettingsFrame, SettingsFrameBuilder},
@@ -82,10 +82,15 @@ fn main() {
         match tcp_stream {
             Ok(tcp_stream) => {
                 let acceptor = acceptor.clone();
-                let ssl_stream = acceptor.accept(tcp_stream).unwrap();
-                let cache = cache.clone();
+                // Just print error and continue if we fail to accept TLS connection, which can happen if client doesn't support TLS or ALPN
+                match acceptor.accept(tcp_stream) {
+                    Ok(ssl_stream) => {
+                        let cache = cache.clone();
 
-                pool.execute(move || handle_client(ssl_stream, cache));
+                        pool.execute(move || handle_client(ssl_stream, cache));
+                    }
+                    Err(e) => println!("Unable to accept TLS connection: {e}"),
+                }
             }
             Err(e) => println!("Unable to get stream from client: {e}"),
         }
@@ -276,6 +281,18 @@ fn handle_frame(
     let stream_id = frame.get_stream_id();
 
     match frame {
+        Frame::GoAway(go_away_frame) => {
+            let reason = String::from_utf8_lossy(&go_away_frame.data);
+            println!(
+                "Received GOAWAY frame. Last stream ID: {}, Error code: {:?}, Reason: {}",
+                go_away_frame.last_stream_id,
+                HTTP2ErrorCode::try_from(go_away_frame.error_code).unwrap(),
+                reason
+            );
+            Err(HTTP2Error::Connection(
+                HTTP2ErrorCode::try_from(go_away_frame.error_code).unwrap(),
+            ))
+        }
         Frame::PushPromise(_) => Err(HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError)),
         Frame::Settings(settings_frame) => handle_settings_frame(&settings_frame, state),
         Frame::Ping(ping_frame) => handle_ping_frame(ping_frame),

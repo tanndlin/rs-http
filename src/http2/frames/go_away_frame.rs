@@ -9,9 +9,9 @@ use crate::{
 #[derive(Debug)]
 pub struct GoAwayFrame {
     pub header: FrameHeader<u8>,
-    last_stream_id: u32, // 31 bits
-    error_code: u32,
-    data: Vec<u8>,
+    pub last_stream_id: u32, // 31 bits
+    pub error_code: u32,
+    pub data: Vec<u8>,
 }
 
 impl TryFrom<&[u8]> for GoAwayFrame {
