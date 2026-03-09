@@ -4,7 +4,7 @@ use std::{
     net::{TcpListener, TcpStream},
     ops::Div,
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, Mutex},
     thread::available_parallelism,
 };
 
@@ -52,8 +52,7 @@ fn main() {
     );
     println!("Serving files from: {}", serve_location.display());
 
-    let cache = Arc::new(cache_all_files(serve_location.to_str().unwrap()).unwrap());
-    println!("Cached {} files", cache.len());
+    let cache = Arc::new(Mutex::new(HashMap::new()));
 
     // Check env for cert dir otherwise .
     let cert_dir = std::env::var("CERT_DIR").unwrap_or_else(|_| ".".to_string());
@@ -90,8 +89,9 @@ fn main() {
                 match acceptor.accept(tcp_stream) {
                     Ok(ssl_stream) => {
                         let cache = cache.clone();
+                        let serve_location = serve_location.clone();
 
-                        pool.execute(move || handle_client(ssl_stream, cache));
+                        pool.execute(move || handle_client(ssl_stream, serve_location, cache));
                     }
                     Err(e) => println!("Unable to accept TLS connection: {e}"),
                 }
@@ -197,8 +197,12 @@ fn flush_outbound_frames(
     Ok(())
 }
 
-fn handle_client(mut tcp_stream: SslStream<TcpStream>, cache: Arc<HashMap<String, Vec<u8>>>) {
-    let mut state = ConnectionState::new(cache);
+fn handle_client(
+    mut tcp_stream: SslStream<TcpStream>,
+    serve_location: PathBuf,
+    cache: Arc<Mutex<HashMap<String, Vec<u8>>>>,
+) {
+    let mut state = ConnectionState::new(serve_location, cache);
 
     // Should start with the HTTP/2 Connection Preface
     let mut preface = [0; 24];

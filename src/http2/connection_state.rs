@@ -1,4 +1,8 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 use hpack::{Decoder, Encoder};
 
@@ -14,6 +18,7 @@ pub struct ConnectionSettings {
 }
 
 pub struct ConnectionState<'a> {
+    pub serve_location: PathBuf,
     pub decoder: Decoder<'a>,
     pub encoder: Encoder<'a>,
     pub settings_acked: bool,
@@ -24,12 +29,13 @@ pub struct ConnectionState<'a> {
     pub waiting_for_continuation: Option<u32>,
     pub window_size: i32,
     pub stream_window_sizes: HashMap<u32, i32>, // TODO: this needs to be refactored into the stream struct
-    pub cache: Arc<HashMap<String, Vec<u8>>>,
+    pub cache: Arc<Mutex<HashMap<String, Vec<u8>>>>,
 }
 
 impl ConnectionState<'_> {
-    pub fn new(cache: Arc<HashMap<String, Vec<u8>>>) -> Self {
+    pub fn new(serve_location: PathBuf, cache: Arc<Mutex<HashMap<String, Vec<u8>>>>) -> Self {
         Self {
+            serve_location,
             cache,
             ..Default::default()
         }
@@ -113,12 +119,32 @@ impl ConnectionState<'_> {
 
         Ok(())
     }
+
+    pub fn get_file(&mut self, path: &String) -> Result<Vec<u8>, String> {
+        if let Some(bytes) = self.cache.lock().unwrap().get(path) {
+            Ok(bytes.clone())
+        } else {
+            let full_path = self
+                .serve_location
+                .join(path.strip_prefix('/').unwrap_or(path));
+
+            let bytes = std::fs::read(full_path).map_err(|_| "File not found".to_string())?;
+
+            self.cache
+                .lock()
+                .unwrap()
+                .insert(path.clone(), bytes.clone());
+
+            Ok(bytes)
+        }
+    }
 }
 
 impl Default for ConnectionState<'_> {
     fn default() -> Self {
         ConnectionState {
-            cache: Arc::new(HashMap::new()),
+            serve_location: PathBuf::new(),
+            cache: Arc::new(Mutex::new(HashMap::new())),
             decoder: Decoder::new(),
             encoder: Encoder::new(),
             settings_acked: true,

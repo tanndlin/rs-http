@@ -1,6 +1,5 @@
-use std::{collections::HashMap, sync::Arc};
-
 use crate::{
+    http2::connection_state::ConnectionState,
     request::{Method, Request},
     response::{Response, ResponseBuilder, StatusCode},
     types::ContentType,
@@ -10,21 +9,15 @@ pub fn u32_from_3_bytes(buf: [u8; 3]) -> u32 {
     u32::from(buf[0]) << 16 | u32::from(buf[1]) << 8 | u32::from(buf[2])
 }
 
-pub fn handle_request(
-    request: &Request,
-    cache: &Arc<HashMap<String, Vec<u8>>>,
-) -> Result<Response, String> {
+pub fn handle_request(request: &Request, state: &mut ConnectionState) -> Result<Response, String> {
     match request.method {
-        Method::GET => handle_get(request, cache),
-        Method::HEAD => handle_head(request, cache),
+        Method::GET => handle_get(request, state),
+        Method::HEAD => handle_head(request, state),
         _ => Ok(Response::method_not_allowed(request.stream_id)),
     }
 }
 
-fn handle_get(
-    request: &Request,
-    cache: &Arc<HashMap<String, Vec<u8>>>,
-) -> Result<Response, String> {
+fn handle_get(request: &Request, state: &mut ConnectionState) -> Result<Response, String> {
     let file_extension = request
         .path
         .split('.')
@@ -56,8 +49,8 @@ fn handle_get(
         None
     };
 
-    match cache.get(&request.path) {
-        Some(bytes) => {
+    match state.get_file(&request.path) {
+        Ok(bytes) => {
             let bytes = if let Some((start, end)) = slice {
                 if start >= bytes.len() {
                     return Ok(Response::range_not_satisfiable(request.stream_id));
@@ -95,14 +88,11 @@ fn handle_get(
 
             Ok(builder.build())
         }
-        None => Ok(Response::not_found(request.stream_id)),
+        Err(_) => Ok(Response::not_found(request.stream_id)),
     }
 }
 
-fn handle_head(
-    request: &Request,
-    cache: &Arc<HashMap<String, Vec<u8>>>,
-) -> Result<Response, String> {
+fn handle_head(request: &Request, state: &mut ConnectionState) -> Result<Response, String> {
     let file_extension = request
         .path
         .split('.')
@@ -134,8 +124,8 @@ fn handle_head(
         None
     };
 
-    match cache.get(&request.path) {
-        Some(bytes) => {
+    match state.get_file(&request.path) {
+        Ok(bytes) => {
             let len = bytes.len();
 
             let mut builder = ResponseBuilder::new()
@@ -159,6 +149,6 @@ fn handle_head(
 
             Ok(builder.build())
         }
-        None => Ok(Response::not_found(request.stream_id)),
+        Err(_) => Ok(Response::not_found(request.stream_id)),
     }
 }
