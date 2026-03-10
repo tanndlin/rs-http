@@ -8,7 +8,6 @@ use crate::http2::{
 pub struct HTTP2StreamClosed {
     pub id: u32,
     pub end_stream_received: bool,
-    pub skipped: bool,
 }
 
 impl HTTP2StreamClosed {
@@ -16,20 +15,20 @@ impl HTTP2StreamClosed {
         self,
         frame: &Frame,
     ) -> Result<(HTTP2Stream, Vec<Frame>), (HTTP2Stream, HTTP2Error)> {
-        match frame {
-            Frame::Priority(p) => self.handle_priority_frame(p),
-            _ => {
-                let id = self.id;
-                match self.end_stream_received {
-                    true => Err((
-                        HTTP2Stream::Closed(self),
-                        HTTP2Error::Connection(HTTP2ErrorCode::StreamClosed),
-                    )),
-                    false => Err((
-                        HTTP2Stream::Closed(self),
-                        HTTP2Error::Stream(StreamError::new(id, HTTP2ErrorCode::StreamClosed)),
-                    )),
-                }
+        if let Frame::Priority(p) = frame {
+            self.handle_priority_frame(p)
+        } else {
+            let id = self.id;
+            if self.end_stream_received {
+                Err((
+                    HTTP2Stream::Closed(self),
+                    HTTP2Error::Connection(HTTP2ErrorCode::StreamClosed),
+                ))
+            } else {
+                Err((
+                    HTTP2Stream::Closed(self),
+                    HTTP2Error::Stream(StreamError::new(id, HTTP2ErrorCode::StreamClosed)),
+                ))
             }
         }
     }
@@ -58,7 +57,6 @@ impl HTTP2StreamClosed {
         Self {
             id,
             end_stream_received,
-            skipped: false,
         }
     }
 }

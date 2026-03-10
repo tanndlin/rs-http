@@ -5,22 +5,16 @@ use crate::http2::{
 
 #[derive(Clone, Debug)]
 pub struct HTTP2StreamReservedRemote {
-    pub id: u32,
+    _id: u32,
 }
 
 impl HTTP2StreamReservedRemote {
-    pub fn new(id: u32) -> Self {
-        Self { id }
-    }
-
     pub fn handle_frame(
         self,
-        frame: Frame,
-        state: &mut ConnectionState<'_>,
+        _frame: Frame,
+        _state: &mut ConnectionState<'_>,
     ) -> Result<(HTTP2Stream, Vec<Frame>), (HTTP2Stream, HTTP2Error)> {
-        match frame {
-            _ => todo!("Implement handle_frame for reserved (remote) stream"),
-        }
+        todo!("Implement handle_frame for reserved (remote) stream")
     }
 }
 

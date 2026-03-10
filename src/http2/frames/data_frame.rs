@@ -44,25 +44,6 @@ pub struct DataFrame {
     pub data: Vec<u8>,
 }
 
-impl DataFrame {
-    #[allow(clippy::cast_possible_truncation)]
-    pub fn new(stream_id: u32, data: Vec<u8>, end_stream: bool) -> Self {
-        Self {
-            header: FrameHeader {
-                length: data.len() as u32,
-                frame_type: FrameType::Data,
-                flags: DataFrameFlags {
-                    padding: false,
-                    end_stream,
-                },
-                stream_id,
-            },
-            pad_length: 0,
-            data,
-        }
-    }
-}
-
 impl TryFrom<&[u8]> for DataFrame {
     type Error = HTTP2Error;
 

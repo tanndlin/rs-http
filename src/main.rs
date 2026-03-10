@@ -24,7 +24,6 @@ use crate::{
         gc_buffer::GCBuffer,
         stream::http_stream::HTTP2Stream,
     },
-    read::cache_all_files,
     util::u32_from_3_bytes,
 };
 
@@ -33,7 +32,6 @@ use threadpool::ThreadPool;
 
 mod encode_to;
 mod http2;
-mod read;
 mod request;
 mod response;
 mod types;
@@ -303,7 +301,7 @@ fn handle_frame(
         }
         Frame::PushPromise(_) => Err(HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError)),
         Frame::Settings(settings_frame) => handle_settings_frame(&settings_frame, state),
-        Frame::Ping(ping_frame) => handle_ping_frame(ping_frame),
+        Frame::Ping(ping_frame) => handle_ping_frame(&ping_frame),
         _ => {
             // Determine if any stream is waiting for a continuation frame and, if so, which one.
             let waiting_for_continuation_stream_id = state.waiting_for_continuation;
@@ -451,7 +449,7 @@ fn handle_settings_frame(
     Ok(ret)
 }
 
-fn handle_ping_frame(ping_frame: PingFrame) -> Result<Vec<Frame>, HTTP2Error> {
+fn handle_ping_frame(ping_frame: &PingFrame) -> Result<Vec<Frame>, HTTP2Error> {
     if ping_frame.header.flags.ack {
         Ok(vec![])
     } else if ping_frame.header.stream_id != 0 || ping_frame.header.length != 8 {

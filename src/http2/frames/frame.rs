@@ -103,21 +103,6 @@ impl Frame {
             Frame::Continuation(f) => f.header.stream_id,
         }
     }
-
-    pub fn to_bytes(self) -> Vec<u8> {
-        match self {
-            Frame::Data(f) => f.to_bytes(),
-            Frame::Headers(f) => f.to_bytes(),
-            Frame::Priority(f) => f.to_bytes(),
-            Frame::RstStream(f) => f.to_bytes(),
-            Frame::Settings(f) => f.to_bytes(),
-            Frame::PushPromise(f) => f.to_bytes(),
-            Frame::Ping(f) => f.to_bytes(),
-            Frame::GoAway(f) => f.to_bytes(),
-            Frame::WindowUpdate(f) => f.to_bytes(),
-            Frame::Continuation(f) => f.to_bytes(),
-        }
-    }
 }
 
 impl EncodeTo for Frame {

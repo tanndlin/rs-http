@@ -11,7 +11,6 @@ use crate::{
         header_builder::HeaderBuilder,
         stream::{
             http_stream::HTTP2Stream, stream_closed::HTTP2StreamClosed,
-            stream_half_closed_local::HTTP2StreamHalfClosedLocal,
             stream_half_closed_remote::HTTP2StreamHalfClosedRemote,
         },
     },
@@ -76,37 +75,37 @@ impl HTTP2StreamOpen {
         };
 
         req.body.extend(data_frame.data);
-        if end_stream {
-            // Make sure content-length header matches body length if it exists
-            if let Some(content_length) = req.headers.get("content-length") {
-                let Ok(content_length) = content_length.parse::<usize>() else {
-                    return Err((
-                        self.close(end_stream),
-                        HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
-                    ));
-                };
+        if !end_stream {
+            return Ok((self.into(), vec![]));
+        }
 
-                if content_length != req.body.len() {
-                    return Err((
-                        self.close(end_stream),
-                        HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
-                    ));
-                }
-            }
-
-            let Some(res) = handle_request(&req, state).ok() else {
+        // Make sure content-length header matches body length if it exists
+        if let Some(content_length) = req.headers.get("content-length") {
+            let Ok(content_length) = content_length.parse::<usize>() else {
                 return Err((
                     self.close(end_stream),
                     HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
                 ));
             };
 
-            let mut frames = vec![HeadersFrame::from((&res, &mut *state)).into()];
-            frames.push(Frame::Data(DataFrame::from(res)));
-            Ok((self.close(end_stream), frames))
-        } else {
-            Ok((self.into(), vec![]))
+            if content_length != req.body.len() {
+                return Err((
+                    self.close(end_stream),
+                    HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
+                ));
+            }
         }
+
+        let Some(res) = handle_request(&req, state).ok() else {
+            return Err((
+                self.close(end_stream),
+                HTTP2Error::Connection(HTTP2ErrorCode::ProtocolError),
+            ));
+        };
+
+        let mut frames = vec![HeadersFrame::from((&res, &mut *state)).into()];
+        frames.push(Frame::Data(DataFrame::from(res)));
+        Ok((self.into().server_sent_es(), frames))
     }
 
     fn handle_headers_frame(
@@ -326,10 +325,6 @@ impl HTTP2StreamOpen {
     pub fn close(self, end_stream: bool) -> HTTP2Stream {
         println!("Closing stream: {}", self.id);
         HTTP2StreamClosed::new(self.id, end_stream).into()
-    }
-
-    pub fn half_close_local(self) -> HTTP2Stream {
-        HTTP2StreamHalfClosedLocal { id: self.id }.into()
     }
 
     pub fn half_close_remote(self) -> HTTP2Stream {

@@ -76,6 +76,7 @@ impl Response {
             .build()
     }
 
+    #[allow(dead_code)]
     pub fn internal_server_error(stream_id: u32) -> Self {
         ResponseBuilder::new()
             .status_code(StatusCode::InteralServerError)

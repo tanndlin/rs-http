@@ -218,6 +218,7 @@ impl SettingsFrameBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub fn max_concurrent_streams(mut self, max: u32) -> Self {
         self.max_concurrent_streams = Some(max);
         self
@@ -233,6 +234,7 @@ impl SettingsFrameBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub fn max_header_list_size(mut self, size: u32) -> Self {
         self.max_header_list_size = Some(size);
         self

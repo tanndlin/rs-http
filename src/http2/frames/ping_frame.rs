@@ -32,7 +32,7 @@ pub struct PingFrame {
 }
 
 impl PingFrame {
-    pub fn ack(other: PingFrame) -> Self {
+    pub fn ack(other: &PingFrame) -> Self {
         Self {
             header: FrameHeader {
                 length: 8,
